@@ -2,7 +2,7 @@ use std::path::Path;
 
 /// Bundles source files for Cloud Build submission.
 ///
-/// Creates a `.s2-bundle/` directory containing:
+/// Creates a `.propel-bundle/` directory containing:
 /// - src/
 /// - Cargo.toml
 /// - Cargo.lock
@@ -11,7 +11,7 @@ pub fn create_bundle(
     project_dir: &Path,
     dockerfile_content: &str,
 ) -> Result<std::path::PathBuf, BundleError> {
-    let bundle_dir = project_dir.join(".s2-bundle");
+    let bundle_dir = project_dir.join(".propel-bundle");
 
     // Clean previous bundle
     if bundle_dir.exists() {

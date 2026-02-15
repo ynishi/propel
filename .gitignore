@@ -6,6 +6,6 @@
 .env.*
 !.env.example
 .DS_Store
-.s2-bundle/
+.propel-bundle/
 workspace/
 .claude

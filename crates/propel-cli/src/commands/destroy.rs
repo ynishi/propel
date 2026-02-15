@@ -43,10 +43,10 @@ pub async fn destroy() -> anyhow::Result<()> {
     }
 
     // 3. Clean local bundle
-    let bundle_dir = project_dir.join(".s2-bundle");
+    let bundle_dir = project_dir.join(".propel-bundle");
     if bundle_dir.exists() {
         std::fs::remove_dir_all(&bundle_dir)?;
-        eprintln!("Removed local .s2-bundle/");
+        eprintln!("Removed local .propel-bundle/");
     }
 
     eprintln!();

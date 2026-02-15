@@ -83,7 +83,7 @@ SUPABASE_JWT_SECRET=your-jwt-secret
     std::fs::write(project_dir.join(".env.example"), env_example)?;
 
     // .gitignore
-    let gitignore = "/target\n.env\n.s2-bundle/\n";
+    let gitignore = "/target\n.env\n.propel-bundle/\n";
     std::fs::write(project_dir.join(".gitignore"), gitignore)?;
 
     eprintln!("Created project '{name}'");
