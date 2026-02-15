@@ -1,0 +1,25 @@
+[package]
+name = "propel-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI tool for deploying Rust apps to Google Cloud Run with Supabase"
+
+[[bin]]
+name = "propel"
+path = "src/main.rs"
+
+[dependencies]
+propel-core = { workspace = true }
+propel-build = { workspace = true }
+propel-cloud = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+tempfile = { workspace = true }

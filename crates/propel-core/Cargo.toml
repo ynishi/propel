@@ -1,0 +1,16 @@
+[package]
+name = "propel-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core types, configuration, and error handling for Propel"
+
+[dependencies]
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = "1"
+tempfile = { workspace = true }

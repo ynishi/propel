@@ -1,0 +1,12 @@
+[project]
+gcp_project_id = "your-gcp-project-id"
+region = "asia-northeast1"
+
+[build]
+# extra_packages = ["libssl-dev"]
+
+[cloud_run]
+memory = "256Mi"
+cpu = 1
+min_instances = 0
+max_instances = 1

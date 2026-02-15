@@ -1,0 +1,18 @@
+use propel_build::dockerfile::DockerfileGenerator;
+use propel_core::{ProjectMeta, PropelConfig};
+use std::path::PathBuf;
+
+pub async fn eject() -> anyhow::Result<()> {
+    let project_dir = PathBuf::from(".");
+    let config = PropelConfig::load(&project_dir)?;
+    let meta = ProjectMeta::from_cargo_toml(&project_dir)?;
+
+    let generator = DockerfileGenerator::new(&config.build, &meta);
+    let dockerfile = generator.render();
+
+    propel_build::eject::eject(&project_dir, &dockerfile)?;
+
+    eprintln!("Ejected build config to .propel/Dockerfile");
+    eprintln!("You can now edit it directly. propel deploy will use this file.");
+    Ok(())
+}

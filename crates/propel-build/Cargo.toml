@@ -1,0 +1,15 @@
+[package]
+name = "propel-build"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Dockerfile and Cloud Build configuration generator for Propel"
+
+[dependencies]
+propel-core = { workspace = true }
+askama = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

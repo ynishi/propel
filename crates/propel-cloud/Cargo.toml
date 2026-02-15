@@ -1,0 +1,18 @@
+[package]
+name = "propel-cloud"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "GCP Cloud Run and Cloud Build operations for Propel"
+
+[dependencies]
+propel-core = { workspace = true }
+tokio = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+mockall = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }
