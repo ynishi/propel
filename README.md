@@ -50,14 +50,14 @@ See [docs/gcp-setup.md](docs/gcp-setup.md) for the full setup guide.
 
 ```bash
 gcloud auth login
-gcloud projects create my-project-id --name="my-project"
-gcloud billing projects link my-project-id --billing-account=XXXXX-XXXXX-XXXXX
+gcloud projects create your-project-id --name="your-project-id"
+gcloud billing projects link your-project-id --billing-account=your-billing-account-id
 gcloud services enable \
   cloudbuild.googleapis.com \
   run.googleapis.com \
   secretmanager.googleapis.com \
   artifactregistry.googleapis.com \
-  --project my-project-id
+  --project your-project-id
 ```
 
 ### 2. Verify
@@ -71,7 +71,7 @@ Propel Doctor
 ------------------------------
 gcloud CLI            OK  555.0.0
 Authentication        OK  you@example.com
-GCP Project           OK  my-project-id (my-project)
+GCP Project           OK  your-project-id
 Billing               OK  Enabled
 Cloud Build API       OK  Enabled
 Cloud Run API         OK  Enabled
@@ -104,7 +104,7 @@ propel destroy
 
 ```toml
 [project]
-gcp_project_id = "my-project-id"
+gcp_project_id = "your-project-id"
 region = "asia-northeast1"
 
 [build]

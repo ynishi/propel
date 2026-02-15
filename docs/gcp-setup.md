@@ -19,21 +19,21 @@ gcloud auth login
 Isolate propel settings from your other GCP work:
 
 ```bash
-gcloud config configurations create propel-dev \
-  --account=your-email@gmail.com
+gcloud config configurations create your-project-id \
+  --account=your-email@example.com
 ```
 
 This automatically activates the new configuration. To switch back later:
 
 ```bash
-gcloud config configurations activate propel-dev  # switch to propel
-gcloud config configurations activate default      # switch back
+gcloud config configurations activate your-project-id  # switch to propel
+gcloud config configurations activate default             # switch back
 ```
 
 ## 3. Create a GCP Project
 
 ```bash
-gcloud projects create propel-dev-YYYYMM --name="propel-dev"
+gcloud projects create your-project-id --name="your-project-id"
 ```
 
 > Project IDs are globally unique. Append a date suffix or random string.
@@ -41,7 +41,7 @@ gcloud projects create propel-dev-YYYYMM --name="propel-dev"
 Set it as default:
 
 ```bash
-gcloud config set project propel-dev-YYYYMM
+gcloud config set project your-project-id
 ```
 
 ## 4. Link a Billing Account
@@ -55,8 +55,8 @@ gcloud billing accounts list
 Link to your project:
 
 ```bash
-gcloud billing projects link propel-dev-YYYYMM \
-  --billing-account=XXXXX-XXXXX-XXXXX
+gcloud billing projects link your-project-id \
+  --billing-account=your-billing-account-id
 ```
 
 ## 5. Enable Required APIs
@@ -68,7 +68,7 @@ gcloud services enable \
   secretmanager.googleapis.com \
   artifactregistry.googleapis.com \
   cloudresourcemanager.googleapis.com \
-  --project propel-dev-YYYYMM
+  --project your-project-id
 ```
 
 | API | Purpose |
@@ -99,7 +99,7 @@ In your project directory:
 
 ```toml
 [project]
-gcp_project_id = "propel-dev-YYYYMM"
+gcp_project_id = "your-project-id"
 region = "asia-northeast1"
 
 [build]
@@ -123,8 +123,8 @@ Expected output:
 Propel Doctor
 ------------------------------
 gcloud CLI        ✓  495.0.0
-Authentication    ✓  your-email@gmail.com
-GCP Project       ✓  propel-dev-YYYYMM
+Authentication    ✓  your-email@example.com
+GCP Project       ✓  your-project-id
 Billing           ✓  Enabled
 Cloud Build API   ✓  Enabled
 Cloud Run API     ✓  Enabled
@@ -154,8 +154,8 @@ propel deploy
 To delete the test project when done:
 
 ```bash
-gcloud projects delete propel-dev-YYYYMM
-gcloud config configurations delete propel-dev
+gcloud projects delete your-project-id
+gcloud config configurations delete your-project-id
 ```
 
 ## Troubleshooting
@@ -166,7 +166,7 @@ Billing must be enabled before APIs can be activated.
 
 ```bash
 gcloud billing accounts list
-gcloud billing projects link PROJECT_ID --billing-account=ACCOUNT_ID
+gcloud billing projects link your-project-id --billing-account=your-billing-account-id
 ```
 
 ### "Permission denied"
@@ -174,15 +174,15 @@ gcloud billing projects link PROJECT_ID --billing-account=ACCOUNT_ID
 Ensure your account has Owner or Editor role on the project:
 
 ```bash
-gcloud projects get-iam-policy PROJECT_ID \
+gcloud projects get-iam-policy your-project-id \
   --flatten="bindings[].members" \
-  --filter="bindings.members:your-email@gmail.com"
+  --filter="bindings.members:your-email@example.com"
 ```
 
 ### "API not enabled"
 
 ```bash
-gcloud services enable SERVICE_NAME --project PROJECT_ID
+gcloud services enable your-api-name --project your-project-id
 ```
 
 Or run `propel doctor` to see which APIs are missing.
