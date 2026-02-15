@@ -3,6 +3,7 @@ name = "propel-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Core types, configuration, and error handling for Propel"
 
 [dependencies]

@@ -3,6 +3,7 @@ name = "propel-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "CLI tool for deploying Rust apps to Google Cloud Run with Supabase"
 
 [[bin]]

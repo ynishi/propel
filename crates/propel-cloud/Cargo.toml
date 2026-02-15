@@ -3,6 +3,7 @@ name = "propel-cloud"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "GCP Cloud Run and Cloud Build operations for Propel"
 
 [dependencies]

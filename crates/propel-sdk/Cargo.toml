@@ -3,6 +3,7 @@ name = "propel-sdk"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "Axum middleware and helpers for Propel (Supabase + Cloud Run)"
 
 [dependencies]
