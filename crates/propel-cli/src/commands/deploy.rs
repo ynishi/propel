@@ -75,6 +75,14 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
         .submit_build(&bundle_dir, gcp_project_id, &image_tag)
         .await?;
 
+    // Discover secrets in Secret Manager and inject into Cloud Run
+    let secrets = client.list_secrets(gcp_project_id).await.unwrap_or_default();
+    if secrets.is_empty() {
+        println!("No secrets found in Secret Manager");
+    } else {
+        println!("Injecting {} secret(s) from Secret Manager", secrets.len());
+    }
+
     // Deploy to Cloud Run
     println!("Deploying to Cloud Run ({region})...");
     let url = client
@@ -84,6 +92,7 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
             gcp_project_id,
             region,
             &config.cloud_run,
+            &secrets,
         )
         .await?;
 

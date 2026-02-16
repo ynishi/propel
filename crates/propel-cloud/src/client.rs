@@ -317,6 +317,7 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         project_id: &str,
         region: &str,
         config: &CloudRunConfig,
+        secrets: &[String],
     ) -> Result<String, DeployError> {
         let cpu = config.cpu.to_string();
         let min = config.min_instances.to_string();
@@ -324,37 +325,53 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         let concurrency = config.concurrency.to_string();
         let port = config.port.to_string();
 
+        // Build --update-secrets value: ENV_VAR=SECRET_NAME:latest,...
+        let secrets_flag = secrets
+            .iter()
+            .map(|s| format!("{s}={s}:latest"))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let mut cmd = vec![
+            "run",
+            "deploy",
+            service_name,
+            "--image",
+            image_tag,
+            "--project",
+            project_id,
+            "--region",
+            region,
+            "--platform",
+            "managed",
+            "--memory",
+            &config.memory,
+            "--cpu",
+            &cpu,
+            "--min-instances",
+            &min,
+            "--max-instances",
+            &max,
+            "--concurrency",
+            &concurrency,
+            "--port",
+            &port,
+            "--allow-unauthenticated",
+            "--quiet",
+            "--format",
+            "value(status.url)",
+        ];
+
+        if !secrets_flag.is_empty() {
+            cmd.push("--update-secrets");
+            cmd.push(&secrets_flag);
+        }
+
+        let cmd_owned: Vec<String> = cmd.iter().map(|s| (*s).to_owned()).collect();
+
         let output = self
             .executor
-            .exec(&args([
-                "run",
-                "deploy",
-                service_name,
-                "--image",
-                image_tag,
-                "--project",
-                project_id,
-                "--region",
-                region,
-                "--platform",
-                "managed",
-                "--memory",
-                &config.memory,
-                "--cpu",
-                &cpu,
-                "--min-instances",
-                &min,
-                "--max-instances",
-                &max,
-                "--concurrency",
-                &concurrency,
-                "--port",
-                &port,
-                "--allow-unauthenticated",
-                "--quiet",
-                "--format",
-                "value(status.url)",
-            ]))
+            .exec(&cmd_owned)
             .await
             .map_err(|e| DeployError::Deploy { source: e })?;
 

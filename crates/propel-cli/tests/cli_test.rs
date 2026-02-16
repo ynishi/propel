@@ -44,7 +44,6 @@ fn new_creates_project_structure() {
     assert!(project_dir.join("Cargo.toml").exists());
     assert!(project_dir.join("src/main.rs").exists());
     assert!(project_dir.join("propel.toml").exists());
-    assert!(project_dir.join(".env.example").exists());
     assert!(project_dir.join(".gitignore").exists());
 }
 
@@ -61,11 +60,10 @@ fn new_cargo_toml_contains_dependencies() {
     let content = std::fs::read_to_string(tmp.path().join("dep-check/Cargo.toml")).unwrap();
     assert!(content.contains("axum"));
     assert!(content.contains("tokio"));
-    assert!(content.contains("propel"));
 }
 
 #[test]
-fn new_main_rs_uses_propel() {
+fn new_main_rs_has_health_and_hello() {
     let tmp = TempDir::new().unwrap();
 
     propel()
@@ -75,8 +73,8 @@ fn new_main_rs_uses_propel() {
         .success();
 
     let content = std::fs::read_to_string(tmp.path().join("sdk-check/src/main.rs")).unwrap();
-    assert!(content.contains("PropelState"));
-    assert!(content.contains("PropelAuth"));
+    assert!(content.contains("health"));
+    assert!(content.contains("Hello from Propel!"));
     assert!(content.contains("0.0.0.0:8080"));
 }
 
@@ -94,19 +92,22 @@ fn new_fails_if_directory_exists() {
 }
 
 #[test]
-fn new_env_example_has_supabase_vars() {
+fn new_scaffold_does_not_require_supabase() {
     let tmp = TempDir::new().unwrap();
 
     propel()
         .current_dir(tmp.path())
-        .args(["new", "env-check"])
+        .args(["new", "no-supa"])
         .assert()
         .success();
 
-    let content = std::fs::read_to_string(tmp.path().join("env-check/.env.example")).unwrap();
-    assert!(content.contains("SUPABASE_URL"));
-    assert!(content.contains("SUPABASE_ANON_KEY"));
-    assert!(content.contains("SUPABASE_JWT_SECRET"));
+    let main_rs = std::fs::read_to_string(tmp.path().join("no-supa/src/main.rs")).unwrap();
+    assert!(!main_rs.contains("PropelState"));
+    assert!(!main_rs.contains("PropelAuth"));
+    assert!(!main_rs.contains("SUPABASE"));
+
+    let cargo = std::fs::read_to_string(tmp.path().join("no-supa/Cargo.toml")).unwrap();
+    assert!(!cargo.contains("propel"));
 }
 
 // ── Eject Command ──

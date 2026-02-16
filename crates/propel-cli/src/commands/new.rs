@@ -19,7 +19,6 @@ edition = "2024"
 [dependencies]
 axum = "0.8"
 tokio = {{ version = "1", features = ["full"] }}
-propel = "0.2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 "#
@@ -27,8 +26,7 @@ tracing-subscriber = "0.3"
     std::fs::write(project_dir.join("Cargo.toml"), cargo_toml)?;
 
     // main.rs
-    let main_rs = r#"use axum::{routing::get, middleware, Router};
-use propel::{PropelState, PropelAuth};
+    let main_rs = r#"use axum::{routing::get, Router};
 
 async fn health() -> &'static str {
     "ok"
@@ -42,18 +40,9 @@ async fn hello() -> &'static str {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let state = PropelState::load().expect("failed to load config");
-
-    // Public routes (no auth required — used by Cloud Run health checks)
-    let public = Router::new()
-        .route("/health", get(health));
-
-    // Protected routes (Supabase JWT required)
-    let protected = Router::new()
-        .route("/", get(hello))
-        .layer(middleware::from_fn_with_state(state.clone(), PropelAuth::verify));
-
-    let app = public.merge(protected).with_state(state);
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/", get(hello));
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await
@@ -80,13 +69,6 @@ async fn main() {
 "#;
     std::fs::write(project_dir.join("propel.toml"), propel_toml)?;
 
-    // .env.example
-    let env_example = r#"SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_JWT_SECRET=your-jwt-secret
-"#;
-    std::fs::write(project_dir.join(".env.example"), env_example)?;
-
     // .gitignore
     let gitignore = "/target\n.env\n.propel-bundle/\n";
     std::fs::write(project_dir.join(".gitignore"), gitignore)?;
@@ -94,9 +76,10 @@ SUPABASE_JWT_SECRET=your-jwt-secret
     println!("Created project '{name}'");
     println!();
     println!("  cd {name}");
-    println!("  cp .env.example .env   # configure Supabase credentials");
     println!("  cargo run              # local development");
     println!("  propel deploy          # deploy to Cloud Run");
+    println!();
+    println!("To add Supabase Auth, run `propel init` and follow the instructions.");
 
     Ok(())
 }

@@ -252,6 +252,7 @@ async fn deploy_to_cloud_run_returns_url() {
             "proj",
             "us-central1",
             &CloudRunConfig::default(),
+            &[],
         )
         .await
         .unwrap();
@@ -280,10 +281,39 @@ async fn deploy_to_cloud_run_failure() {
             "proj",
             "us-central1",
             &CloudRunConfig::default(),
+            &[],
         )
         .await;
 
     assert!(matches!(result, Err(DeployError::Deploy { .. })));
+}
+
+#[tokio::test]
+async fn deploy_to_cloud_run_with_secrets() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"--update-secrets".to_owned())
+                && args.contains(&"SUPABASE_URL=SUPABASE_URL:latest,API_KEY=API_KEY:latest".to_owned())
+        })
+        .returning(|_| Ok("https://svc-abc123-uc.a.run.app\n".to_owned()));
+
+    let client = GcloudClient::with_executor(mock);
+    let secrets = vec!["SUPABASE_URL".to_owned(), "API_KEY".to_owned()];
+    let url = client
+        .deploy_to_cloud_run(
+            "svc",
+            "gcr.io/proj/svc:latest",
+            "proj",
+            "us-central1",
+            &CloudRunConfig::default(),
+            &secrets,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(url, "https://svc-abc123-uc.a.run.app");
 }
 
 // ── Secret Manager Tests ──
