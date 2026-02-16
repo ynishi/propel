@@ -295,7 +295,8 @@ async fn deploy_to_cloud_run_with_secrets() {
     mock.expect_exec()
         .withf(|args| {
             args.contains(&"--update-secrets".to_owned())
-                && args.contains(&"SUPABASE_URL=SUPABASE_URL:latest,API_KEY=API_KEY:latest".to_owned())
+                && args
+                    .contains(&"SUPABASE_URL=SUPABASE_URL:latest,API_KEY=API_KEY:latest".to_owned())
         })
         .returning(|_| Ok("https://svc-abc123-uc.a.run.app\n".to_owned()));
 
@@ -460,14 +461,20 @@ async fn grant_secret_access_calls_add_iam_policy_binding() {
         .withf(|args| {
             args.contains(&"add-iam-policy-binding".to_owned())
                 && args.contains(&"MY_SECRET".to_owned())
-                && args.contains(&"serviceAccount:123-compute@developer.gserviceaccount.com".to_owned())
+                && args.contains(
+                    &"serviceAccount:123-compute@developer.gserviceaccount.com".to_owned(),
+                )
                 && args.contains(&"roles/secretmanager.secretAccessor".to_owned())
         })
         .returning(|_| Ok(String::new()));
 
     let client = GcloudClient::with_executor(mock);
     let result = client
-        .grant_secret_access("proj", "MY_SECRET", "123-compute@developer.gserviceaccount.com")
+        .grant_secret_access(
+            "proj",
+            "MY_SECRET",
+            "123-compute@developer.gserviceaccount.com",
+        )
         .await;
 
     assert!(result.is_ok());

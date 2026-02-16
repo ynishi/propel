@@ -25,7 +25,10 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
     let region = &config.project.region;
 
     // Discover secrets for display / deletion
-    let secrets = client.list_secrets(gcp_project_id).await.unwrap_or_default();
+    let secrets = client
+        .list_secrets(gcp_project_id)
+        .await
+        .unwrap_or_default();
 
     if !skip_confirm {
         println!("This will delete:");

@@ -76,7 +76,10 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
         .await?;
 
     // Discover secrets in Secret Manager and inject into Cloud Run
-    let secrets = client.list_secrets(gcp_project_id).await.unwrap_or_default();
+    let secrets = client
+        .list_secrets(gcp_project_id)
+        .await
+        .unwrap_or_default();
     if secrets.is_empty() {
         println!("No secrets found in Secret Manager");
     } else {
