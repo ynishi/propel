@@ -2,7 +2,25 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-/// propel.toml configuration
+/// Top-level `propel.toml` configuration.
+///
+/// All sections are optional — sensible defaults are provided.
+///
+/// # Example
+///
+/// ```toml
+/// [project]
+/// gcp_project_id = "my-project"
+///
+/// [build]
+/// include = ["migrations/", "templates/"]
+///
+/// [build.env]
+/// TEMPLATE_DIR = "/app/templates"
+///
+/// [cloud_run]
+/// memory = "1Gi"
+/// ```
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PropelConfig {
     #[serde(default)]
@@ -24,27 +42,75 @@ pub struct ProjectConfig {
     pub gcp_project_id: Option<String>,
 }
 
+/// Build configuration under `[build]`.
+///
+/// Controls Docker image generation and runtime content.
+///
+/// # Bundle strategy
+///
+/// By default, `propel deploy` bundles **all files in the git repository**
+/// (respecting `.gitignore`) into the Docker build context. This mirrors
+/// the `git clone` + `docker build` mental model used by GitHub Actions
+/// and similar CI/CD systems.
+///
+/// The bundle is created via `git ls-files`, so:
+/// - Tracked and untracked (non-ignored) files are included
+/// - `.gitignore`d files (e.g. `target/`) are excluded
+/// - `.propel-bundle/`, `.propel/`, `.git/` are always excluded
+///
+/// # Runtime content control
+///
+/// The `include` field controls what goes into the **final runtime image**:
+///
+/// - **`include` omitted (default)**: the entire bundle is copied into the
+///   runtime container via `COPY . .`. Zero config — migrations, templates,
+///   static assets all work automatically.
+///
+/// - **`include` specified**: only the listed paths (plus the compiled binary)
+///   are copied into the runtime image. This acts as a lightweight alternative
+///   to `propel eject` for users who want smaller images.
+///
+/// # Escalation path
+///
+/// ```text
+/// Zero config  →  include/env  →  propel eject
+/// (all-in)        (selective)      (full Dockerfile control)
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildConfig {
-    /// Rust builder image
+    /// Rust builder image (default: `rust:1.84-bookworm`).
     #[serde(default = "default_builder_image")]
     pub base_image: String,
-    /// Runtime base image
+    /// Runtime base image (default: `gcr.io/distroless/cc-debian12`).
     #[serde(default = "default_runtime_image")]
     pub runtime_image: String,
-    /// Additional system packages to install via apt-get
+    /// Additional system packages to install via `apt-get` during build.
     #[serde(default)]
     pub extra_packages: Vec<String>,
-    /// Cargo Chef version
+    /// Cargo Chef version for dependency caching.
     #[serde(default = "default_cargo_chef_version")]
     pub cargo_chef_version: String,
-    /// Files/directories to include in the runtime image.
-    /// When None, the entire bundle is copied (COPY . .).
-    /// When Some, only the specified paths are copied (overrides all-in default).
+    /// Paths to copy into the runtime image.
+    ///
+    /// When `None`, the entire bundle is copied (`COPY . .`).
+    /// When `Some`, only these paths are copied — overriding the all-in default.
+    ///
+    /// ```toml
+    /// [build]
+    /// include = ["migrations/", "templates/"]
+    /// ```
     #[serde(default)]
     pub include: Option<Vec<String>>,
     /// Static environment variables baked into the container image.
-    /// These become ENV directives in the Dockerfile.
+    ///
+    /// These become `ENV` directives in the generated Dockerfile.
+    /// For runtime-configurable values (API keys, secrets), use
+    /// Cloud Run environment variables or Secret Manager instead.
+    ///
+    /// ```toml
+    /// [build.env]
+    /// TEMPLATE_DIR = "/app/templates"
+    /// ```
     #[serde(default)]
     pub env: HashMap<String, String>,
 }

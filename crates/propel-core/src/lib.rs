@@ -1,3 +1,8 @@
+//! Core types and configuration for propel.
+//!
+//! This crate defines the `propel.toml` schema ([`PropelConfig`]),
+//! project metadata ([`ProjectMeta`]), and shared error types.
+
 pub mod config;
 pub mod error;
 pub mod project;

@@ -36,6 +36,7 @@ See [docs/gcp-setup.md](docs/gcp-setup.md) for the full setup guide.
 |---------|-------------|
 | `propel new <name>` | Scaffold a new project |
 | `propel deploy` | Build and deploy to Cloud Run |
+| `propel deploy --allow-dirty` | Deploy with uncommitted changes |
 | `propel destroy` | Delete service, image, and local bundle |
 | `propel doctor` | Check GCP setup and readiness |
 | `propel secret set KEY=VALUE` | Store a secret in Secret Manager |
@@ -122,7 +123,36 @@ concurrency = 80
 port = 8080
 ```
 
-Run `propel eject` to export and customize the generated Dockerfile.
+### Bundle and runtime
+
+By default, `propel deploy` bundles **all files in your git repository** (respecting `.gitignore`) and copies them into the runtime container. This means `migrations/`, `templates/`, `static/`, and any other committed files are available at runtime with zero configuration.
+
+If you want a smaller runtime image, use `[build.include]` to select specific paths:
+
+```toml
+[build]
+include = ["migrations/", "templates/"]
+
+[build.env]
+TEMPLATE_DIR = "/app/templates"
+```
+
+| Scenario | What to do |
+|----------|-----------|
+| Migrations, templates, config files | Nothing — they're included by default |
+| Optimize runtime image size | Add `include = [...]` to select specific paths |
+| Static env vars tied to image layout | Add `[build.env]` entries |
+| Full Dockerfile control | Run `propel eject` |
+
+### Dirty check
+
+`propel deploy` verifies your git working tree is clean before deploying.
+This prevents accidentally shipping uncommitted changes. Use `--allow-dirty` to override:
+
+```bash
+propel deploy                  # Requires clean working tree
+propel deploy --allow-dirty    # Skips the check
+```
 
 ## Architecture
 

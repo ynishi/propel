@@ -3,6 +3,25 @@ use std::fmt::Write;
 use propel_core::{BuildConfig, ProjectMeta};
 
 /// Generates an optimized multi-stage Dockerfile using Cargo Chef.
+///
+/// The Dockerfile has four stages:
+///
+/// 1. **Planner** — `cargo chef prepare` extracts the dependency recipe
+/// 2. **Cacher** — `cargo chef cook` pre-builds dependencies (cached layer)
+/// 3. **Builder** — `cargo build --release` compiles the application
+/// 4. **Runtime** — minimal distroless image with binary + runtime assets
+///
+/// # Runtime stage behavior
+///
+/// The runtime stage content depends on [`BuildConfig::include`]:
+///
+/// - **`None`** (default): `COPY . .` — entire bundle is available at runtime.
+///   Migrations, templates, and config files work without any configuration.
+///
+/// - **`Some(paths)`**: only the specified paths are copied via individual
+///   `COPY` directives. The binary is always copied regardless.
+///
+/// [`BuildConfig::env`] entries become `ENV` directives in the runtime stage.
 pub struct DockerfileGenerator<'a> {
     config: &'a BuildConfig,
     meta: &'a ProjectMeta,

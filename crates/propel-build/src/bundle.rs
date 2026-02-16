@@ -7,9 +7,22 @@ const PROPEL_EXCLUDES: &[&str] = &[".propel-bundle", ".propel", ".git"];
 
 /// Bundles project files for Cloud Build submission.
 ///
-/// Uses `git ls-files` to respect `.gitignore`, then copies all tracked
-/// and untracked-but-not-ignored files into `.propel-bundle/`.
-/// The generated Dockerfile is written into the bundle.
+/// Creates `.propel-bundle/` containing every file that `git ls-files`
+/// reports (tracked + untracked-but-not-ignored), plus the generated
+/// Dockerfile. This mirrors a clean `git clone` — no manual file lists
+/// needed.
+///
+/// # Exclusions
+///
+/// The following are always excluded regardless of `.gitignore`:
+/// - `.propel-bundle/` (the bundle itself)
+/// - `.propel/` (ejected Dockerfile directory)
+/// - `.git/` (repository metadata)
+///
+/// # Safety gate
+///
+/// Call [`is_dirty`] before this function to verify the working tree
+/// is clean. `propel deploy` enforces this unless `--allow-dirty` is passed.
 pub fn create_bundle(project_dir: &Path, dockerfile_content: &str) -> Result<PathBuf, BundleError> {
     let bundle_dir = project_dir.join(".propel-bundle");
 
@@ -99,6 +112,15 @@ fn git_ls_files(project_dir: &Path) -> Result<Vec<PathBuf>, BundleError> {
 }
 
 /// Checks whether the git working tree has uncommitted changes.
+///
+/// Uses `git status --porcelain` — returns `true` if there are staged,
+/// unstaged, or untracked files. This is the safety gate that prevents
+/// deploying unintended changes.
+///
+/// # Errors
+///
+/// Returns [`BundleError::GitCommand`] if git is not installed, or
+/// [`BundleError::GitFailed`] if the directory is not a git repository.
 pub fn is_dirty(project_dir: &Path) -> Result<bool, BundleError> {
     let output = Command::new("git")
         .args(["status", "--porcelain"])
