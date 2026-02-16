@@ -482,7 +482,7 @@ fn eject_creates_propel_dir_with_dockerfile() {
 
     assert!(!is_ejected(project));
 
-    eject(project, "FROM rust:1.84\nRUN cargo build\n").unwrap();
+    eject(project, "FROM rust:1.85\nRUN cargo build\n").unwrap();
 
     assert!(is_ejected(project));
     assert!(project.join(".propel/Dockerfile").exists());
@@ -492,7 +492,7 @@ fn eject_creates_propel_dir_with_dockerfile() {
 fn eject_preserves_dockerfile_content() {
     let tmp = TempDir::new().unwrap();
     let project = tmp.path();
-    let content = "FROM rust:1.84\nWORKDIR /app\nCOPY . .\nRUN cargo build --release\n";
+    let content = "FROM rust:1.85\nWORKDIR /app\nCOPY . .\nRUN cargo build --release\n";
 
     eject(project, content).unwrap();
 

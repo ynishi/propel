@@ -9,7 +9,7 @@ fn load_returns_defaults_when_no_config_file() {
     assert_eq!(config.project.region, "us-central1");
     assert!(config.project.name.is_none());
     assert!(config.project.gcp_project_id.is_none());
-    assert_eq!(config.build.base_image, "rust:1.84-bookworm");
+    assert_eq!(config.build.base_image, "rust:1.93-bookworm");
     assert_eq!(config.build.runtime_image, "gcr.io/distroless/cc-debian12");
     assert!(config.build.extra_packages.is_empty());
     assert_eq!(config.cloud_run.memory, "512Mi");
@@ -86,7 +86,7 @@ gcp_project_id = "partial-project"
     // Defaults preserved
     assert_eq!(config.project.region, "us-central1");
     assert_eq!(config.cloud_run.memory, "512Mi");
-    assert_eq!(config.build.base_image, "rust:1.84-bookworm");
+    assert_eq!(config.build.base_image, "rust:1.93-bookworm");
 }
 
 #[test]

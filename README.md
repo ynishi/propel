@@ -14,7 +14,14 @@ propel deploy
 - Submits remote builds via Cloud Build
 - Deploys to Cloud Run with Artifact Registry
 - Manages secrets through Secret Manager
-- Provides Supabase Auth JWT middleware for Axum (via `propel-sdk`)
+- Provides Supabase Auth JWT middleware for Axum (via `propel` crate)
+
+## Requirements
+
+- **Rust ≥ 1.85** (edition 2024)
+- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud` CLI)
+- A GCP project with billing enabled
+- Required APIs: Cloud Build, Cloud Run, Secret Manager, Artifact Registry
 
 ## Install
 
@@ -22,19 +29,12 @@ propel deploy
 cargo install propel-cli
 ```
 
-### As a library
+### As a library (Supabase Auth middleware for Axum)
 
 ```toml
 [dependencies]
-propel = "0.2"                                    # core + build + cloud
-propel = { version = "0.2", features = ["sdk"] }  # + Supabase Auth middleware
+propel = "0.3"
 ```
-
-## Prerequisites
-
-- [Google Cloud SDK](https://cloud.google.com/sdk/docs/install) (`gcloud` CLI)
-- A GCP project with billing enabled
-- Required APIs: Cloud Build, Cloud Run, Secret Manager, Artifact Registry
 
 See [docs/gcp-setup.md](docs/gcp-setup.md) for the full setup guide.
 
@@ -43,6 +43,7 @@ See [docs/gcp-setup.md](docs/gcp-setup.md) for the full setup guide.
 | Command | Description |
 |---------|-------------|
 | `propel new <name>` | Scaffold a new project |
+| `propel init` | Add Propel to an existing project |
 | `propel deploy` | Build and deploy to Cloud Run |
 | `propel deploy --allow-dirty` | Deploy with uncommitted changes |
 | `propel destroy` | Delete service, image, and local bundle |
@@ -117,7 +118,7 @@ gcp_project_id = "your-project-id"
 region = "asia-northeast1"
 
 [build]
-base_image = "rust:1.84-bookworm"            # Rust build image
+base_image = "rust:1.93-bookworm"            # Rust build image
 runtime_image = "gcr.io/distroless/cc-debian12" # Minimal runtime
 extra_packages = []                           # apt-get packages
 cargo_chef_version = "0.1.68"
@@ -166,19 +167,19 @@ propel deploy --allow-dirty    # Skips the check
 
 | Crate | crates.io | Description |
 |-------|-----------|-------------|
-| [`propel`](crates/propel) | [![crates.io](https://img.shields.io/crates/v/propel.svg)](https://crates.io/crates/propel) | Unified facade — re-exports all sub-crates |
+| [`propel`](crates/propel) | [![crates.io](https://img.shields.io/crates/v/propel.svg)](https://crates.io/crates/propel) | Axum middleware for Supabase Auth on Cloud Run |
 | [`propel-cli`](crates/propel-cli) | [![crates.io](https://img.shields.io/crates/v/propel-cli.svg)](https://crates.io/crates/propel-cli) | CLI binary (`propel` command) |
 | [`propel-core`](crates/propel-core) | [![crates.io](https://img.shields.io/crates/v/propel-core.svg)](https://crates.io/crates/propel-core) | Configuration, project metadata, shared error types |
 | [`propel-build`](crates/propel-build) | [![crates.io](https://img.shields.io/crates/v/propel-build.svg)](https://crates.io/crates/propel-build) | Dockerfile generation, source bundling, eject |
 | [`propel-cloud`](crates/propel-cloud) | [![crates.io](https://img.shields.io/crates/v/propel-cloud.svg)](https://crates.io/crates/propel-cloud) | GCP operations (Cloud Build, Cloud Run, Secret Manager) |
-| [`propel-sdk`](crates/propel-sdk) | [![crates.io](https://img.shields.io/crates/v/propel-sdk.svg)](https://crates.io/crates/propel-sdk) | Axum middleware for Supabase Auth JWT |
+| [`propel-sdk`](crates/propel-sdk) | [![crates.io](https://img.shields.io/crates/v/propel-sdk.svg)](https://crates.io/crates/propel-sdk) | **Deprecated** — use `propel` instead |
 
 ```text
 propel (facade)
 ├── propel-core     ← PropelConfig, ProjectMeta, Error
 ├── propel-build    ← DockerfileGenerator, bundle, eject
 ├── propel-cloud    ← GcloudClient, GcloudExecutor
-└── propel-sdk      ← PropelAuth, PropelState (feature = "sdk")
+└── propel-sdk      ← DEPRECATED (re-exports propel)
 
 propel-cli          ← CLI binary using core + build + cloud
 ```

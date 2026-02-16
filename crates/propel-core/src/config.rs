@@ -78,7 +78,9 @@ pub struct ProjectConfig {
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BuildConfig {
-    /// Rust builder image (default: `rust:1.84-bookworm`).
+    /// Rust builder image (default: `rust:1.93-bookworm`).
+    ///
+    /// Must be ≥ 1.85 for `edition = "2024"` support.
     #[serde(default = "default_builder_image")]
     pub base_image: String,
     /// Runtime base image (default: `gcr.io/distroless/cc-debian12`).
@@ -206,7 +208,7 @@ fn default_region() -> String {
 }
 
 fn default_builder_image() -> String {
-    "rust:1.84-bookworm".to_owned()
+    "rust:1.93-bookworm".to_owned()
 }
 
 fn default_runtime_image() -> String {
