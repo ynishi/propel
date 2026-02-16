@@ -493,3 +493,41 @@ async fn grant_secret_access_failure() {
 
     assert!(matches!(result, Err(SecretError::GrantAccess { .. })));
 }
+
+#[tokio::test]
+async fn delete_secret_success() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"secrets".to_owned())
+                && args.contains(&"delete".to_owned())
+                && args.contains(&"MY_SECRET".to_owned())
+                && args.contains(&"--quiet".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.delete_secret("proj", "MY_SECRET").await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn delete_secret_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| args.contains(&"delete".to_owned()) && args.contains(&"secrets".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "NOT_FOUND".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.delete_secret("proj", "GONE").await;
+
+    assert!(matches!(result, Err(SecretError::Delete { .. })));
+}

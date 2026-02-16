@@ -3,8 +3,14 @@ use propel_core::{ProjectMeta, PropelConfig};
 use std::io::Write;
 use std::path::PathBuf;
 
+/// Mask a secret name, showing first 5 chars + "***".
+fn mask_name(name: &str) -> String {
+    let visible = name.len().min(5);
+    format!("{}***", &name[..visible])
+}
+
 /// Delete Cloud Run service, container image, and local bundle.
-pub async fn destroy(skip_confirm: bool) -> anyhow::Result<()> {
+pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Result<()> {
     let project_dir = PathBuf::from(".");
     let client = GcloudClient::new();
 
@@ -18,11 +24,22 @@ pub async fn destroy(skip_confirm: bool) -> anyhow::Result<()> {
     let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
     let region = &config.project.region;
 
+    // Discover secrets for display / deletion
+    let secrets = client.list_secrets(gcp_project_id).await.unwrap_or_default();
+
     if !skip_confirm {
         println!("This will delete:");
         println!("  - Cloud Run service '{service_name}' in {region}");
         println!("  - Container images in Artifact Registry");
         println!("  - Local .propel-bundle/");
+
+        if include_secrets && !secrets.is_empty() {
+            println!("  - {} secret(s) from Secret Manager:", secrets.len());
+            for s in &secrets {
+                println!("      {}", mask_name(s));
+            }
+        }
+
         println!();
         print!("Are you sure? [y/N] ");
         std::io::stdout().flush()?;
@@ -62,7 +79,18 @@ pub async fn destroy(skip_confirm: bool) -> anyhow::Result<()> {
         Err(e) => println!("  Skipped ({})", e),
     }
 
-    // 3. Clean local bundle
+    // 3. Delete secrets if requested
+    if include_secrets && !secrets.is_empty() {
+        println!("Deleting {} secret(s)...", secrets.len());
+        for s in &secrets {
+            match client.delete_secret(gcp_project_id, s).await {
+                Ok(()) => println!("  Deleted {}", mask_name(s)),
+                Err(e) => println!("  Skipped {} ({})", mask_name(s), e),
+            }
+        }
+    }
+
+    // 4. Clean local bundle
     let bundle_dir = project_dir.join(".propel-bundle");
     if bundle_dir.exists() {
         std::fs::remove_dir_all(&bundle_dir)?;
@@ -71,6 +99,16 @@ pub async fn destroy(skip_confirm: bool) -> anyhow::Result<()> {
 
     println!();
     println!("Destroy complete.");
+
+    // Show remaining secrets hint
+    if !include_secrets && !secrets.is_empty() {
+        println!();
+        println!(
+            "Note: {} secret(s) remain in Secret Manager.",
+            secrets.len()
+        );
+        println!("  To delete them: propel destroy --include-secrets");
+    }
 
     Ok(())
 }

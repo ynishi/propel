@@ -561,6 +561,26 @@ impl<E: GcloudExecutor> GcloudClient<E> {
 
         Ok(output.lines().map(|s| s.to_owned()).collect())
     }
+
+    pub async fn delete_secret(
+        &self,
+        project_id: &str,
+        secret_name: &str,
+    ) -> Result<(), SecretError> {
+        self.executor
+            .exec(&args([
+                "secrets",
+                "delete",
+                secret_name,
+                "--project",
+                project_id,
+                "--quiet",
+            ]))
+            .await
+            .map_err(|e| SecretError::Delete { source: e })?;
+
+        Ok(())
+    }
 }
 
 // ── Helper ──
@@ -680,4 +700,7 @@ pub enum SecretError {
 
     #[error("failed to grant secret access")]
     GrantAccess { source: GcloudError },
+
+    #[error("failed to delete secret")]
+    Delete { source: GcloudError },
 }

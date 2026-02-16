@@ -37,6 +37,9 @@ enum Commands {
         /// Skip confirmation prompt
         #[arg(long, short = 'y')]
         yes: bool,
+        /// Also delete secrets from Secret Manager
+        #[arg(long)]
+        include_secrets: bool,
     },
     /// Check GCP setup and readiness
     Doctor,
@@ -77,7 +80,10 @@ async fn main() -> anyhow::Result<()> {
             SecretAction::List => commands::secret_list().await?,
         },
         Commands::Eject => commands::eject().await?,
-        Commands::Destroy { yes } => commands::destroy(yes).await?,
+        Commands::Destroy {
+            yes,
+            include_secrets,
+        } => commands::destroy(yes, include_secrets).await?,
         Commands::Doctor => commands::doctor().await?,
         Commands::Status => commands::status().await?,
         Commands::Logs => commands::logs().await?,
