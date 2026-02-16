@@ -5,8 +5,8 @@ use std::path::PathBuf;
 
 /// Mask a secret name, showing first 5 chars + "***".
 fn mask_name(name: &str) -> String {
-    let visible = name.len().min(5);
-    format!("{}***", &name[..visible])
+    let prefix: String = name.chars().take(5).collect();
+    format!("{prefix}***")
 }
 
 /// Delete Cloud Run service, container image, and local bundle.
@@ -114,4 +114,39 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mask_name_ascii_long() {
+        assert_eq!(mask_name("MY_SECRET_KEY"), "MY_SE***");
+    }
+
+    #[test]
+    fn mask_name_ascii_exact_five() {
+        assert_eq!(mask_name("ABCDE"), "ABCDE***");
+    }
+
+    #[test]
+    fn mask_name_ascii_short() {
+        assert_eq!(mask_name("AB"), "AB***");
+    }
+
+    #[test]
+    fn mask_name_empty() {
+        assert_eq!(mask_name(""), "***");
+    }
+
+    #[test]
+    fn mask_name_non_ascii() {
+        assert_eq!(mask_name("秘密のキー"), "秘密のキー***");
+    }
+
+    #[test]
+    fn mask_name_mixed_ascii_non_ascii() {
+        assert_eq!(mask_name("KEY_秘密"), "KEY_秘***");
+    }
 }
