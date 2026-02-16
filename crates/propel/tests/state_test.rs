@@ -1,4 +1,4 @@
-use propel_sdk::state::PropelState;
+use propel::state::PropelState;
 use std::sync::Mutex;
 
 /// Environment variable tests mutate process-global state, so we serialize them.

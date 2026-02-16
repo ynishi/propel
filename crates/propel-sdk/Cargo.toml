@@ -5,25 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Axum middleware and helpers for Propel (Supabase + Cloud Run)"
+description = "DEPRECATED: use `propel` instead. This crate has been merged into the `propel` crate."
 readme = "README.md"
-keywords = ["axum", "supabase", "jwt", "middleware", "auth"]
+keywords = ["deprecated", "axum", "supabase", "jwt", "middleware"]
 categories = ["web-programming", "authentication"]
 
 [dependencies]
-axum = { workspace = true }
-tower = { workspace = true }
-tokio = { workspace = true }
-jsonwebtoken = { workspace = true }
-dotenvy = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-reqwest = { workspace = true }
-
-[dev-dependencies]
-axum = { workspace = true }
-tokio = { workspace = true, features = ["full"] }
-tower = { workspace = true, features = ["util"] }
-http-body-util = "0.1"
+propel = { path = "../propel", version = "0.2.1" }

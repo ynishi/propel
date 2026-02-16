@@ -61,11 +61,11 @@ fn new_cargo_toml_contains_dependencies() {
     let content = std::fs::read_to_string(tmp.path().join("dep-check/Cargo.toml")).unwrap();
     assert!(content.contains("axum"));
     assert!(content.contains("tokio"));
-    assert!(content.contains("propel-sdk"));
+    assert!(content.contains("propel"));
 }
 
 #[test]
-fn new_main_rs_uses_propel_sdk() {
+fn new_main_rs_uses_propel() {
     let tmp = TempDir::new().unwrap();
 
     propel()

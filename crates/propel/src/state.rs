@@ -16,7 +16,7 @@ impl PropelState {
     ///
     /// Call this in your `main()`:
     /// ```rust,no_run
-    /// use propel_sdk::PropelState;
+    /// use propel::PropelState;
     /// let state = PropelState::load().expect("failed to load config");
     /// ```
     pub fn load() -> Result<Self, SdkError> {

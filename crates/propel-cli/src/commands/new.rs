@@ -19,7 +19,7 @@ edition = "2024"
 [dependencies]
 axum = "0.8"
 tokio = {{ version = "1", features = ["full"] }}
-propel-sdk = "0.2"
+propel = "0.2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 "#
@@ -28,7 +28,7 @@ tracing-subscriber = "0.3"
 
     // main.rs
     let main_rs = r#"use axum::{routing::get, middleware, Router};
-use propel_sdk::{PropelState, PropelAuth};
+use propel::{PropelState, PropelAuth};
 
 async fn health() -> &'static str {
     "ok"

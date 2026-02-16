@@ -1154,10 +1154,17 @@ dependencies = [
 name = "propel"
 version = "0.2.1"
 dependencies = [
- "propel-build",
- "propel-cloud",
- "propel-core",
- "propel-sdk",
+ "axum",
+ "dotenvy",
+ "http-body-util",
+ "jsonwebtoken",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -1213,17 +1220,7 @@ dependencies = [
 name = "propel-sdk"
 version = "0.2.1"
 dependencies = [
- "axum",
- "dotenvy",
- "http-body-util",
- "jsonwebtoken",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tower",
- "tracing",
+ "propel",
 ]
 
 [[package]]

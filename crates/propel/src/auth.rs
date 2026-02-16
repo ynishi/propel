@@ -25,7 +25,7 @@ pub struct SupabaseClaims {
 /// Usage:
 /// ```rust,no_run
 /// use axum::{Router, middleware, routing::get};
-/// use propel_sdk::{PropelState, PropelAuth};
+/// use propel::{PropelState, PropelAuth};
 ///
 /// async fn handler() -> &'static str { "ok" }
 ///

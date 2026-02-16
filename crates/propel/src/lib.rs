@@ -1,16 +1,4 @@
-//! Deploy Rust (Axum) apps to Google Cloud Run.
-//!
-//! This is the unified facade crate that re-exports all Propel sub-crates.
-//! Use feature flags to control which components are included.
-//!
-//! # Feature flags
-//!
-//! | Feature | Default | Crate | Description |
-//! |---------|---------|-------|-------------|
-//! | `core` | yes | [`propel-core`](https://crates.io/crates/propel-core) | Configuration and shared types |
-//! | `build` | yes | [`propel-build`](https://crates.io/crates/propel-build) | Dockerfile generation and bundling |
-//! | `cloud` | yes | [`propel-cloud`](https://crates.io/crates/propel-cloud) | GCP Cloud Run / Cloud Build operations |
-//! | `sdk` | no | [`propel-sdk`](https://crates.io/crates/propel-sdk) | Axum middleware for Supabase Auth |
+//! Axum middleware for Supabase Auth on Google Cloud Run.
 //!
 //! # Quick start
 //!
@@ -20,48 +8,25 @@
 //! ```
 //!
 //! ```rust,no_run
-//! use std::path::Path;
-//! use propel::{PropelConfig, ProjectMeta};
-//! use propel::build::DockerfileGenerator;
+//! use axum::{routing::get, middleware, Router};
+//! use propel::{PropelState, PropelAuth};
 //!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let config = PropelConfig::load(Path::new("."))?;
-//! let meta = ProjectMeta::from_cargo_toml(Path::new("."))?;
-//! let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
-//! let dockerfile = generator.render();
-//! # Ok(())
+//! async fn handler() -> &'static str { "ok" }
+//!
+//! # #[tokio::main]
+//! # async fn main() {
+//! let state = PropelState::load().unwrap();
+//! let app: Router = Router::new()
+//!     .route("/api/protected", get(handler))
+//!     .layer(middleware::from_fn_with_state(state.clone(), PropelAuth::verify))
+//!     .with_state(state);
 //! # }
 //! ```
 
-// Core types flattened into root namespace for convenience.
-#[cfg(feature = "core")]
-pub use propel_core::*;
+pub mod auth;
+pub mod error;
+pub mod state;
 
-/// Dockerfile generation, source bundling, and eject.
-///
-/// See [`propel-build`](https://crates.io/crates/propel-build) for details.
-#[cfg(feature = "build")]
-pub mod build {
-    pub use propel_build::*;
-}
-
-/// GCP Cloud Run and Cloud Build operations.
-///
-/// See [`propel-cloud`](https://crates.io/crates/propel-cloud) for details.
-#[cfg(feature = "cloud")]
-pub mod cloud {
-    pub use propel_cloud::*;
-}
-
-/// Axum middleware for Supabase Auth JWT verification.
-///
-/// **Requires** the `sdk` feature flag (not enabled by default).
-///
-/// **Stability:** This module is pre-1.0. Breaking changes may occur in minor
-/// version updates as the Axum + Supabase integration expands.
-///
-/// See [`propel-sdk`](https://crates.io/crates/propel-sdk) for details.
-#[cfg(feature = "sdk")]
-pub mod sdk {
-    pub use propel_sdk::*;
-}
+pub use auth::{PropelAuth, SupabaseClaims};
+pub use error::SdkError;
+pub use state::PropelState;
