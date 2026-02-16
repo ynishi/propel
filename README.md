@@ -121,7 +121,7 @@ region = "asia-northeast1"
 base_image = "rust:1.93-bookworm"            # Rust build image
 runtime_image = "gcr.io/distroless/cc-debian12" # Minimal runtime
 extra_packages = []                           # apt-get packages
-cargo_chef_version = "0.1.68"
+cargo_chef_version = "0.1.73"
 
 [cloud_run]
 memory = "512Mi"

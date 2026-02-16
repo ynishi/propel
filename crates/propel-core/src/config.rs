@@ -216,7 +216,7 @@ fn default_runtime_image() -> String {
 }
 
 fn default_cargo_chef_version() -> String {
-    "0.1.68".to_owned()
+    "0.1.73".to_owned()
 }
 
 fn default_memory() -> String {
