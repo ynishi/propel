@@ -91,12 +91,12 @@ SUPABASE_JWT_SECRET=your-jwt-secret
     let gitignore = "/target\n.env\n.propel-bundle/\n";
     std::fs::write(project_dir.join(".gitignore"), gitignore)?;
 
-    eprintln!("Created project '{name}'");
-    eprintln!();
-    eprintln!("  cd {name}");
-    eprintln!("  cp .env.example .env   # configure Supabase credentials");
-    eprintln!("  cargo run              # local development");
-    eprintln!("  propel deploy          # deploy to Cloud Run");
+    println!("Created project '{name}'");
+    println!();
+    println!("  cd {name}");
+    println!("  cp .env.example .env   # configure Supabase credentials");
+    println!("  cargo run              # local development");
+    println!("  propel deploy          # deploy to Cloud Run");
 
     Ok(())
 }

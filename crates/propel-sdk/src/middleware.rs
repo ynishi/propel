@@ -44,19 +44,27 @@ impl PropelAuth {
             .headers()
             .get("authorization")
             .and_then(|v| v.to_str().ok())
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+            .ok_or_else(|| {
+                tracing::warn!(path = %request.uri(), "missing Authorization header");
+                StatusCode::UNAUTHORIZED
+            })?;
 
-        let token = auth_header
-            .strip_prefix("Bearer ")
-            .ok_or(StatusCode::UNAUTHORIZED)?;
+        let token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+            tracing::warn!(path = %request.uri(), "malformed Authorization header");
+            StatusCode::UNAUTHORIZED
+        })?;
 
         let mut validation = Validation::new(Algorithm::HS256);
         validation.set_audience(&["authenticated"]);
 
         let key = DecodingKey::from_secret(state.supabase_jwt_secret.as_bytes());
 
-        let token_data = decode::<SupabaseClaims>(token, &key, &validation)
-            .map_err(|_| StatusCode::UNAUTHORIZED)?;
+        let token_data = decode::<SupabaseClaims>(token, &key, &validation).map_err(|e| {
+            tracing::warn!(path = %request.uri(), error = %e, "JWT verification failed");
+            StatusCode::UNAUTHORIZED
+        })?;
+
+        tracing::debug!(sub = %token_data.claims.sub, "authenticated");
 
         // Attach claims to request extensions for downstream handlers
         request.extensions_mut().insert(token_data.claims);

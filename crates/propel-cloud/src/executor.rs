@@ -26,6 +26,8 @@ impl GcloudExecutor for RealExecutor {
     async fn exec(&self, args: &[String]) -> Result<String, GcloudError> {
         use std::process::Stdio;
 
+        tracing::debug!(cmd = %format!("gcloud {}", args.join(" ")), "exec");
+
         let output = tokio::process::Command::new("gcloud")
             .args(args)
             .stdout(Stdio::piped())
@@ -38,6 +40,7 @@ impl GcloudExecutor for RealExecutor {
             String::from_utf8(output.stdout).map_err(|e| GcloudError::InvalidUtf8 { source: e })
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            tracing::warn!(cmd = %format!("gcloud {}", args.join(" ")), %stderr, "command failed");
             Err(GcloudError::CommandFailed {
                 args: args.to_vec(),
                 stderr,
@@ -47,6 +50,8 @@ impl GcloudExecutor for RealExecutor {
 
     async fn exec_streaming(&self, args: &[String]) -> Result<(), GcloudError> {
         use std::process::Stdio;
+
+        tracing::debug!(cmd = %format!("gcloud {}", args.join(" ")), "exec_streaming");
 
         let status = tokio::process::Command::new("gcloud")
             .args(args)
@@ -59,6 +64,7 @@ impl GcloudExecutor for RealExecutor {
         if status.success() {
             Ok(())
         } else {
+            tracing::warn!(cmd = %format!("gcloud {}", args.join(" ")), %status, "streaming command failed");
             Err(GcloudError::CommandFailed {
                 args: args.to_vec(),
                 stderr: format!("exit code: {status}"),
@@ -73,6 +79,12 @@ impl GcloudExecutor for RealExecutor {
     ) -> Result<String, GcloudError> {
         use std::process::Stdio;
         use tokio::io::AsyncWriteExt;
+
+        tracing::debug!(
+            cmd = %format!("gcloud {}", args.join(" ")),
+            stdin_bytes = stdin_data.len(),
+            "exec_with_stdin"
+        );
 
         let mut child = tokio::process::Command::new("gcloud")
             .args(args)
@@ -102,6 +114,7 @@ impl GcloudExecutor for RealExecutor {
             String::from_utf8(output.stdout).map_err(|e| GcloudError::InvalidUtf8 { source: e })
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            tracing::warn!(cmd = %format!("gcloud {}", args.join(" ")), %stderr, "command failed");
             Err(GcloudError::CommandFailed {
                 args: args.to_vec(),
                 stderr,

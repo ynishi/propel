@@ -57,8 +57,7 @@ pub async fn doctor() -> anyhow::Result<()> {
     if report.all_passed() {
         println!("All checks passed!");
     } else {
-        println!("Some checks failed. See above for details.");
-        std::process::exit(1);
+        anyhow::bail!("some checks failed — see above for details");
     }
 
     Ok(())

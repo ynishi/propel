@@ -40,6 +40,7 @@ pub fn create_bundle(project_dir: &Path, dockerfile_content: &str) -> Result<Pat
 
     // Get file list from git (respects .gitignore)
     let files = git_ls_files(project_dir)?;
+    tracing::debug!(file_count = files.len(), "git ls-files collected");
 
     // Copy each file into the bundle
     for relative_path in &files {
@@ -75,6 +76,7 @@ pub fn create_bundle(project_dir: &Path, dockerfile_content: &str) -> Result<Pat
         }
     })?;
 
+    tracing::debug!(path = %bundle_dir.display(), "bundle created");
     Ok(bundle_dir)
 }
 

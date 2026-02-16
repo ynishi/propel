@@ -30,6 +30,8 @@ impl ProjectMeta {
     /// Extract project metadata from a Cargo.toml file.
     pub fn from_cargo_toml(project_dir: &Path) -> crate::Result<Self> {
         let cargo_path = project_dir.join("Cargo.toml");
+        tracing::debug!(path = %cargo_path.display(), "reading Cargo.toml");
+
         let content =
             std::fs::read_to_string(&cargo_path).map_err(|e| crate::Error::CargoTomlRead {
                 path: cargo_path.clone(),
@@ -58,6 +60,13 @@ impl ProjectMeta {
             .and_then(|bins| bins.into_iter().next())
             .and_then(|b| b.name)
             .unwrap_or_else(|| name.clone());
+
+        tracing::debug!(
+            name = %name,
+            version = %version,
+            binary = %binary_name,
+            "project metadata resolved"
+        );
 
         Ok(Self {
             name,

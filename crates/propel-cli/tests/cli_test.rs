@@ -38,7 +38,7 @@ fn new_creates_project_structure() {
         .args(["new", project_name])
         .assert()
         .success()
-        .stderr(predicate::str::contains("Created project"));
+        .stdout(predicate::str::contains("Created project"));
 
     let project_dir = tmp.path().join(project_name);
     assert!(project_dir.join("Cargo.toml").exists());
@@ -129,7 +129,7 @@ fn eject_creates_dockerfile_in_propel_dir() {
         .arg("eject")
         .assert()
         .success()
-        .stderr(predicate::str::contains("Ejected"));
+        .stdout(predicate::str::contains("Ejected"));
 
     assert!(tmp.path().join(".propel/Dockerfile").exists());
 

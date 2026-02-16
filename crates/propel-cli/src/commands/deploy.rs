@@ -38,27 +38,27 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     );
 
     // Pre-flight checks
-    eprintln!("Running pre-flight checks...");
+    println!("Running pre-flight checks...");
     let report = client.check_prerequisites(gcp_project_id).await?;
 
     if report.has_warnings() {
-        eprintln!("Warning: the following APIs are not enabled:");
+        println!("Warning: the following APIs are not enabled:");
         for api in &report.disabled_apis {
-            eprintln!("  - {api}");
+            println!("  - {api}");
         }
-        eprintln!("Enable them with: gcloud services enable <api> --project {gcp_project_id}");
+        println!("Enable them with: gcloud services enable <api> --project {gcp_project_id}");
         anyhow::bail!("required APIs not enabled");
     }
 
     // Ensure Artifact Registry repository
-    eprintln!("Ensuring Artifact Registry repository...");
+    println!("Ensuring Artifact Registry repository...");
     client
         .ensure_artifact_repo(gcp_project_id, region, repo_name)
         .await?;
 
     // Determine Dockerfile content
     let dockerfile_content = if eject_mod::is_ejected(&project_dir) {
-        eprintln!("Using ejected Dockerfile from .propel/Dockerfile");
+        println!("Using ejected Dockerfile from .propel/Dockerfile");
         eject_mod::load_ejected_dockerfile(&project_dir)?
     } else {
         let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
@@ -66,17 +66,17 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     };
 
     // Bundle source
-    eprintln!("Bundling source...");
+    println!("Bundling source...");
     let bundle_dir = bundle::create_bundle(&project_dir, &dockerfile_content)?;
 
     // Submit build
-    eprintln!("Submitting build to Cloud Build...");
+    println!("Submitting build to Cloud Build...");
     client
         .submit_build(&bundle_dir, gcp_project_id, &image_tag)
         .await?;
 
     // Deploy to Cloud Run
-    eprintln!("Deploying to Cloud Run ({region})...");
+    println!("Deploying to Cloud Run ({region})...");
     let url = client
         .deploy_to_cloud_run(
             service_name,
@@ -87,8 +87,8 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
         )
         .await?;
 
-    eprintln!();
-    eprintln!("Deployed: {url}");
+    println!();
+    println!("Deployed: {url}");
 
     Ok(())
 }

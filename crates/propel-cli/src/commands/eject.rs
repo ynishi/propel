@@ -12,7 +12,7 @@ pub async fn eject() -> anyhow::Result<()> {
 
     propel_build::eject::eject(&project_dir, &dockerfile)?;
 
-    eprintln!("Ejected build config to .propel/Dockerfile");
-    eprintln!("You can now edit it directly. propel deploy will use this file.");
+    println!("Ejected build config to .propel/Dockerfile");
+    println!("You can now edit it directly. propel deploy will use this file.");
     Ok(())
 }

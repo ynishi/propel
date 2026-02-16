@@ -34,6 +34,13 @@ impl<'a> DockerfileGenerator<'a> {
     }
 
     pub fn render(&self) -> String {
+        tracing::debug!(
+            base = %self.config.base_image,
+            runtime = %self.config.runtime_image,
+            binary = %self.meta.binary_name,
+            port = self.port,
+            "generating Dockerfile"
+        );
         let extra_packages = if self.config.extra_packages.is_empty() {
             String::new()
         } else {

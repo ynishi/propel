@@ -20,13 +20,17 @@ impl PropelState {
     /// ```
     pub fn load() -> Result<Self, SdkError> {
         // Attempt to load .env file (silently ignore if not found)
-        let _ = dotenvy::dotenv();
+        let dotenv_loaded = dotenvy::dotenv().is_ok();
+        tracing::debug!(dotenv = dotenv_loaded, "loading PropelState");
 
-        Ok(Self {
+        let state = Self {
             supabase_url: required_env("SUPABASE_URL")?,
             supabase_anon_key: required_env("SUPABASE_ANON_KEY")?,
             supabase_jwt_secret: required_env("SUPABASE_JWT_SECRET")?,
-        })
+        };
+
+        tracing::debug!(supabase_url = %state.supabase_url, "PropelState loaded");
+        Ok(state)
     }
 }
 

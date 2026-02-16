@@ -17,7 +17,7 @@ pub async fn secret_set(key_value: &str) -> anyhow::Result<()> {
     let client = GcloudClient::new();
     client.set_secret(project_id, key, value).await?;
 
-    eprintln!("Secret '{key}' set successfully");
+    println!("Secret '{key}' set successfully");
     Ok(())
 }
 
@@ -33,7 +33,7 @@ pub async fn secret_list() -> anyhow::Result<()> {
     let secrets = client.list_secrets(project_id).await?;
 
     if secrets.is_empty() {
-        eprintln!("No secrets found");
+        println!("No secrets found");
     } else {
         for name in &secrets {
             println!("{name}");

@@ -26,31 +26,31 @@ pub async fn destroy() -> anyhow::Result<()> {
     );
 
     // 1. Delete Cloud Run service
-    eprintln!("Deleting Cloud Run service '{service_name}'...");
+    println!("Deleting Cloud Run service '{service_name}'...");
     match client
         .delete_service(service_name, gcp_project_id, region)
         .await
     {
-        Ok(()) => eprintln!("  Deleted."),
-        Err(e) => eprintln!("  Skipped ({})", e),
+        Ok(()) => println!("  Deleted."),
+        Err(e) => println!("  Skipped ({})", e),
     }
 
     // 2. Delete container image from Artifact Registry
-    eprintln!("Deleting container image...");
+    println!("Deleting container image...");
     match client.delete_image(&image_tag, gcp_project_id).await {
-        Ok(()) => eprintln!("  Deleted."),
-        Err(e) => eprintln!("  Skipped ({})", e),
+        Ok(()) => println!("  Deleted."),
+        Err(e) => println!("  Skipped ({})", e),
     }
 
     // 3. Clean local bundle
     let bundle_dir = project_dir.join(".propel-bundle");
     if bundle_dir.exists() {
         std::fs::remove_dir_all(&bundle_dir)?;
-        eprintln!("Removed local .propel-bundle/");
+        println!("Removed local .propel-bundle/");
     }
 
-    eprintln!();
-    eprintln!("Destroy complete.");
+    println!();
+    println!("Destroy complete.");
 
     Ok(())
 }

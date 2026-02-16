@@ -178,16 +178,24 @@ impl PropelConfig {
     pub fn load(project_dir: &std::path::Path) -> crate::Result<Self> {
         let config_path = project_dir.join("propel.toml");
         if config_path.exists() {
+            tracing::debug!(path = %config_path.display(), "loading propel.toml");
             let content =
                 std::fs::read_to_string(&config_path).map_err(|e| crate::Error::ConfigLoad {
                     path: config_path.clone(),
                     source: e,
                 })?;
-            toml::from_str(&content).map_err(|e| crate::Error::ConfigParse {
+            let config: Self = toml::from_str(&content).map_err(|e| crate::Error::ConfigParse {
                 path: config_path,
                 source: e,
-            })
+            })?;
+            tracing::debug!(
+                region = %config.project.region,
+                port = config.cloud_run.port,
+                "config loaded"
+            );
+            Ok(config)
         } else {
+            tracing::debug!(path = %config_path.display(), "propel.toml not found, using defaults");
             Ok(Self::default())
         }
     }
