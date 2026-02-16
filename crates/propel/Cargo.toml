@@ -1,0 +1,24 @@
+[package]
+name = "propel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Deploy Rust (Axum) apps to Google Cloud Run — unified facade crate"
+readme = "README.md"
+keywords = ["deploy", "cloud-run", "gcp", "axum", "supabase"]
+categories = ["development-tools", "web-programming"]
+
+[features]
+default = ["core", "build", "cloud"]
+core = ["dep:propel-core"]
+build = ["dep:propel-build"]
+cloud = ["dep:propel-cloud"]
+sdk = ["dep:propel-sdk"]
+
+[dependencies]
+propel-core = { workspace = true, optional = true }
+propel-build = { workspace = true, optional = true }
+propel-cloud = { workspace = true, optional = true }
+propel-sdk = { workspace = true, optional = true }

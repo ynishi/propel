@@ -19,7 +19,15 @@ propel deploy
 ## Install
 
 ```bash
-cargo install --path crates/propel-cli
+cargo install propel-cli
+```
+
+### As a library
+
+```toml
+[dependencies]
+propel = "0.2"                                    # core + build + cloud
+propel = { version = "0.2", features = ["sdk"] }  # + Supabase Auth middleware
 ```
 
 ## Prerequisites
@@ -154,10 +162,32 @@ propel deploy                  # Requires clean working tree
 propel deploy --allow-dirty    # Skips the check
 ```
 
-## Architecture
+## Crates
 
+| Crate | crates.io | Description |
+|-------|-----------|-------------|
+| [`propel`](crates/propel) | [![crates.io](https://img.shields.io/crates/v/propel.svg)](https://crates.io/crates/propel) | Unified facade — re-exports all sub-crates |
+| [`propel-cli`](crates/propel-cli) | [![crates.io](https://img.shields.io/crates/v/propel-cli.svg)](https://crates.io/crates/propel-cli) | CLI binary (`propel` command) |
+| [`propel-core`](crates/propel-core) | [![crates.io](https://img.shields.io/crates/v/propel-core.svg)](https://crates.io/crates/propel-core) | Configuration, project metadata, shared error types |
+| [`propel-build`](crates/propel-build) | [![crates.io](https://img.shields.io/crates/v/propel-build.svg)](https://crates.io/crates/propel-build) | Dockerfile generation, source bundling, eject |
+| [`propel-cloud`](crates/propel-cloud) | [![crates.io](https://img.shields.io/crates/v/propel-cloud.svg)](https://crates.io/crates/propel-cloud) | GCP operations (Cloud Build, Cloud Run, Secret Manager) |
+| [`propel-sdk`](crates/propel-sdk) | [![crates.io](https://img.shields.io/crates/v/propel-sdk.svg)](https://crates.io/crates/propel-sdk) | Axum middleware for Supabase Auth JWT |
+
+```text
+propel (facade)
+├── propel-core     ← PropelConfig, ProjectMeta, Error
+├── propel-build    ← DockerfileGenerator, bundle, eject
+├── propel-cloud    ← GcloudClient, GcloudExecutor
+└── propel-sdk      ← PropelAuth, PropelState (feature = "sdk")
+
+propel-cli          ← CLI binary using core + build + cloud
 ```
+
+### Architecture
+
+```text
 crates/
+  propel/        Unified facade crate
   propel-cli/    CLI binary (clap)
   propel-core/   Config loading, project metadata
   propel-build/  Dockerfile generation, bundling, eject

@@ -1151,6 +1151,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "propel"
+version = "0.2.1"
+dependencies = [
+ "propel-build",
+ "propel-cloud",
+ "propel-core",
+ "propel-sdk",
+]
+
+[[package]]
 name = "propel-build"
 version = "0.2.1"
 dependencies = [

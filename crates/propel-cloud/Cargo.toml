@@ -4,7 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "GCP Cloud Run and Cloud Build operations for Propel"
+readme = "README.md"
+keywords = ["deploy", "cloud-run", "gcp", "cloud-build"]
+categories = ["development-tools"]
 
 [dependencies]
 propel-core = { workspace = true }

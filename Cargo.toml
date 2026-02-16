@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/propel",
     "crates/propel-cli",
     "crates/propel-core",
     "crates/propel-build",
@@ -13,6 +14,7 @@ version = "0.2.1"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ynishi/propel"
+homepage = "https://github.com/ynishi/propel"
 
 [workspace.dependencies]
 # Internal

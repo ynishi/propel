@@ -4,7 +4,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 description = "Axum middleware and helpers for Propel (Supabase + Cloud Run)"
+readme = "README.md"
+keywords = ["axum", "supabase", "jwt", "middleware", "auth"]
+categories = ["web-programming", "authentication"]
 
 [dependencies]
 axum = { workspace = true }
