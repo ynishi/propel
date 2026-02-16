@@ -1152,7 +1152,7 @@ dependencies = [
 
 [[package]]
 name = "propel"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "axum",
  "dotenvy",
@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "propel-build"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "propel-core",
  "tempfile",
@@ -1179,7 +1179,7 @@ dependencies = [
 
 [[package]]
 name = "propel-cli"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -1196,7 +1196,7 @@ dependencies = [
 
 [[package]]
 name = "propel-cloud"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "mockall",
  "propel-core",
@@ -1207,7 +1207,7 @@ dependencies = [
 
 [[package]]
 name = "propel-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "serde",
  "tempfile",
@@ -1218,7 +1218,7 @@ dependencies = [
 
 [[package]]
 name = "propel-sdk"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "propel",
 ]

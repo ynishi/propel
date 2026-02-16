@@ -11,4 +11,4 @@ keywords = ["deprecated", "axum", "supabase", "jwt", "middleware"]
 categories = ["web-programming", "authentication"]
 
 [dependencies]
-propel = { path = "../propel", version = "0.2.1" }
+propel = { path = "../propel", version = "0.3.0" }
