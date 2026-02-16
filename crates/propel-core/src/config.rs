@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 /// propel.toml configuration
@@ -36,6 +38,15 @@ pub struct BuildConfig {
     /// Cargo Chef version
     #[serde(default = "default_cargo_chef_version")]
     pub cargo_chef_version: String,
+    /// Files/directories to include in the runtime image.
+    /// When None, the entire bundle is copied (COPY . .).
+    /// When Some, only the specified paths are copied (overrides all-in default).
+    #[serde(default)]
+    pub include: Option<Vec<String>>,
+    /// Static environment variables baked into the container image.
+    /// These become ENV directives in the Dockerfile.
+    #[serde(default)]
+    pub env: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +88,8 @@ impl Default for BuildConfig {
             runtime_image: default_runtime_image(),
             extra_packages: Vec::new(),
             cargo_chef_version: default_cargo_chef_version(),
+            include: None,
+            env: HashMap::new(),
         }
     }
 }

@@ -5,9 +5,17 @@ use propel_core::{ProjectMeta, PropelConfig};
 use std::path::PathBuf;
 
 /// Execute the full deploy pipeline.
-pub async fn deploy() -> anyhow::Result<()> {
+pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     let project_dir = PathBuf::from(".");
     let client = GcloudClient::new();
+
+    // Dirty check: refuse to deploy uncommitted changes unless --allow-dirty
+    if !allow_dirty && bundle::is_dirty(&project_dir)? {
+        anyhow::bail!(
+            "uncommitted changes detected.\n\
+             Commit your changes, or use `propel deploy --allow-dirty` to deploy anyway."
+        );
+    }
 
     // Load configuration
     let config = PropelConfig::load(&project_dir)?;

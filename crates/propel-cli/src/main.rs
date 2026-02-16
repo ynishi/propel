@@ -18,7 +18,11 @@ enum Commands {
         name: String,
     },
     /// Deploy to Google Cloud Run
-    Deploy,
+    Deploy {
+        /// Allow deploying with uncommitted changes
+        #[arg(long)]
+        allow_dirty: bool,
+    },
     /// Manage secrets
     Secret {
         #[command(subcommand)]
@@ -60,7 +64,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::New { name } => commands::new_project(&name).await?,
-        Commands::Deploy => commands::deploy().await?,
+        Commands::Deploy { allow_dirty } => commands::deploy(allow_dirty).await?,
         Commands::Secret { action } => match action {
             SecretAction::Set { key_value } => commands::secret_set(&key_value).await?,
             SecretAction::List => commands::secret_list().await?,

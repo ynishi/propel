@@ -181,12 +181,86 @@ fn deploy_fails_without_gcp_project_id() {
     std::fs::create_dir(tmp.path().join("src")).unwrap();
     std::fs::write(tmp.path().join("src/main.rs"), "fn main() {}").unwrap();
 
+    // --allow-dirty skips git check so we can test config validation
+    propel()
+        .current_dir(tmp.path())
+        .args(["deploy", "--allow-dirty"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("gcp_project_id"));
+}
+
+// ── Deploy: Dirty Check ──
+
+#[test]
+fn deploy_fails_on_non_git_directory() {
+    let tmp = TempDir::new().unwrap();
+
+    std::fs::write(
+        tmp.path().join("Cargo.toml"),
+        "[package]\nname = \"no-git\"\nversion = \"0.1.0\"\nedition = \"2024\"",
+    )
+    .unwrap();
+    std::fs::create_dir(tmp.path().join("src")).unwrap();
+    std::fs::write(tmp.path().join("src/main.rs"), "fn main() {}").unwrap();
+
     propel()
         .current_dir(tmp.path())
         .arg("deploy")
         .assert()
         .failure()
-        .stderr(predicate::str::contains("gcp_project_id"));
+        .stderr(predicate::str::contains("git"));
+}
+
+#[test]
+fn deploy_dirty_repo_blocked_without_flag() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[package]\nname = \"dirty\"\nversion = \"0.1.0\"\nedition = \"2024\"",
+    )
+    .unwrap();
+    std::fs::create_dir(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/main.rs"), "fn main() {}").unwrap();
+
+    // git init + commit
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["config", "user.email", "t@t.com"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["config", "user.name", "T"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["add", "."])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    std::process::Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+
+    // Make dirty
+    std::fs::write(dir.join("src/main.rs"), "fn main() { /* dirty */ }").unwrap();
+
+    propel()
+        .current_dir(dir)
+        .arg("deploy")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("uncommitted changes"));
 }
 
 // ── Secret Command ──

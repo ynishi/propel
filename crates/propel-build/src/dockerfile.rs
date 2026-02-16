@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use propel_core::{BuildConfig, ProjectMeta};
 
 /// Generates an optimized multi-stage Dockerfile using Cargo Chef.
@@ -20,6 +22,9 @@ impl<'a> DockerfileGenerator<'a> {
                 self.config.extra_packages.join(" ")
             )
         };
+
+        let runtime_copies = self.render_runtime_copies();
+        let env_directives = self.render_env_directives();
 
         format!(
             r#"# === Base: cargo-chef installed once ===
@@ -47,7 +52,8 @@ RUN cargo build --release --bin {binary}
 # === Stage 4: Runtime ===
 FROM {runtime}
 COPY --from=builder /app/target/release/{binary} /usr/local/bin/app
-EXPOSE 8080
+WORKDIR /app
+{runtime_copies}{env_directives}EXPOSE 8080
 CMD ["app"]
 "#,
             base = self.config.base_image,
@@ -55,6 +61,44 @@ CMD ["app"]
             runtime = self.config.runtime_image,
             binary = self.meta.binary_name,
             extra_packages = extra_packages,
+            runtime_copies = runtime_copies,
+            env_directives = env_directives,
         )
+    }
+
+    /// Generates COPY directives for the runtime stage.
+    ///
+    /// - `include = None`: copies entire build context (`COPY . .`)
+    /// - `include = Some(paths)`: copies only specified paths
+    fn render_runtime_copies(&self) -> String {
+        match &self.config.include {
+            None => "COPY . .\n".to_owned(),
+            Some(paths) if paths.is_empty() => String::new(),
+            Some(paths) => {
+                let mut out = String::new();
+                for path in paths {
+                    let trimmed = path.trim_end_matches('/');
+                    let _ = writeln!(out, "COPY {trimmed}/ ./{trimmed}/");
+                }
+                out
+            }
+        }
+    }
+
+    /// Generates ENV directives from `[build.env]`.
+    fn render_env_directives(&self) -> String {
+        if self.config.env.is_empty() {
+            return String::new();
+        }
+
+        let mut keys: Vec<&String> = self.config.env.keys().collect();
+        keys.sort();
+
+        let mut out = String::new();
+        for key in keys {
+            let value = &self.config.env[key];
+            let _ = writeln!(out, "ENV {key}={value}");
+        }
+        out
     }
 }

@@ -1,4 +1,8 @@
-use propel_build::bundle::create_bundle;
+use std::collections::HashMap;
+use std::path::Path;
+use std::process::Command;
+
+use propel_build::bundle::{create_bundle, is_dirty};
 use propel_build::dockerfile::DockerfileGenerator;
 use propel_build::eject::{eject, is_ejected, load_ejected_dockerfile};
 use propel_core::{BuildConfig, ProjectMeta};
@@ -10,6 +14,39 @@ fn default_meta() -> ProjectMeta {
         version: "0.1.0".to_owned(),
         binary_name: "my-service".to_owned(),
     }
+}
+
+/// Initialize a git repo with a minimal Rust project and an initial commit.
+fn init_git_project(dir: &Path) {
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
+    std::fs::write(dir.join("src/main.rs"), "fn main() {}").unwrap();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(dir)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(dir)
+        .output()
+        .unwrap();
 }
 
 // ── Dockerfile Generation Tests ──
@@ -93,24 +130,97 @@ fn dockerfile_exposes_port_8080() {
     assert!(output.contains("EXPOSE 8080"));
 }
 
+// ── Dockerfile: include / env Tests ──
+
+#[test]
+fn dockerfile_default_include_none_copies_all() {
+    let config = BuildConfig::default();
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta);
+    let output = generator.render();
+
+    // include=None → runtime gets COPY . .
+    assert!(output.contains("COPY . ."));
+    assert!(output.contains("WORKDIR /app"));
+}
+
+#[test]
+fn dockerfile_include_some_copies_only_specified() {
+    let config = BuildConfig {
+        include: Some(vec!["migrations/".to_owned(), "templates/".to_owned()]),
+        ..Default::default()
+    };
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta);
+    let output = generator.render();
+
+    // Should have individual COPY directives, not COPY . .
+    // The runtime stage should contain these:
+    let runtime_section = output.split("Stage 4: Runtime").nth(1).unwrap();
+    assert!(runtime_section.contains("COPY migrations/ ./migrations/"));
+    assert!(runtime_section.contains("COPY templates/ ./templates/"));
+    // Should NOT have the all-in COPY . . in the runtime section
+    // Note: builder stage still has COPY . . — that's expected
+    assert!(!runtime_section.contains("COPY . ."));
+}
+
+#[test]
+fn dockerfile_include_empty_vec_no_runtime_copy() {
+    let config = BuildConfig {
+        include: Some(vec![]),
+        ..Default::default()
+    };
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta);
+    let output = generator.render();
+
+    let runtime_section = output.split("Stage 4: Runtime").nth(1).unwrap();
+    // Binary is still copied
+    assert!(runtime_section.contains("COPY --from=builder"));
+    // No bundle files copied
+    assert!(!runtime_section.contains("COPY . ."));
+}
+
+#[test]
+fn dockerfile_build_env_generates_env_directives() {
+    let mut env = HashMap::new();
+    env.insert("TEMPLATE_DIR".to_owned(), "/app/templates".to_owned());
+    env.insert("LUA_DIR".to_owned(), "/app/lua".to_owned());
+
+    let config = BuildConfig {
+        env,
+        ..Default::default()
+    };
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta);
+    let output = generator.render();
+
+    assert!(output.contains("ENV LUA_DIR=/app/lua"));
+    assert!(output.contains("ENV TEMPLATE_DIR=/app/templates"));
+}
+
+#[test]
+fn dockerfile_no_env_when_empty() {
+    let config = BuildConfig::default();
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta);
+    let output = generator.render();
+
+    assert!(!output.contains("ENV "));
+}
+
 // ── Bundle Tests ──
 
 #[test]
 fn bundle_creates_expected_structure() {
     let tmp = TempDir::new().unwrap();
     let project = tmp.path();
-
-    // Setup minimal project
-    std::fs::create_dir_all(project.join("src")).unwrap();
-    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
-    std::fs::write(project.join("Cargo.lock"), "# lock file").unwrap();
-    std::fs::write(project.join("src/main.rs"), "fn main() {}").unwrap();
+    init_git_project(project);
 
     let bundle_dir = create_bundle(project, "FROM rust\n").unwrap();
 
     assert!(bundle_dir.join("Dockerfile").exists());
     assert!(bundle_dir.join("Cargo.toml").exists());
-    assert!(bundle_dir.join("Cargo.lock").exists());
     assert!(bundle_dir.join("src/main.rs").exists());
 
     let dockerfile = std::fs::read_to_string(bundle_dir.join("Dockerfile")).unwrap();
@@ -118,29 +228,149 @@ fn bundle_creates_expected_structure() {
 }
 
 #[test]
-fn bundle_works_without_cargo_lock() {
+fn bundle_includes_additional_dirs() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path();
+
+    // Create project with extra dirs
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    std::fs::create_dir_all(project.join("migrations")).unwrap();
+    std::fs::create_dir_all(project.join("templates")).unwrap();
+    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
+    std::fs::write(project.join("src/main.rs"), "fn main() {}").unwrap();
+    std::fs::write(project.join("migrations/001.sql"), "CREATE TABLE t;").unwrap();
+    std::fs::write(project.join("templates/index.html"), "<h1>hello</h1>").unwrap();
+
+    // Git init and commit all
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+
+    let bundle_dir = create_bundle(project, "FROM rust\n").unwrap();
+
+    // Additional dirs should be in the bundle
+    assert!(bundle_dir.join("migrations/001.sql").exists());
+    assert!(bundle_dir.join("templates/index.html").exists());
+}
+
+#[test]
+fn bundle_respects_gitignore() {
     let tmp = TempDir::new().unwrap();
     let project = tmp.path();
 
     std::fs::create_dir_all(project.join("src")).unwrap();
+    std::fs::create_dir_all(project.join("target")).unwrap();
     std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
     std::fs::write(project.join("src/main.rs"), "fn main() {}").unwrap();
+    std::fs::write(project.join("target/debug"), "binary").unwrap();
+    std::fs::write(project.join(".gitignore"), "target/\n").unwrap();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
 
     let bundle_dir = create_bundle(project, "FROM rust\n").unwrap();
 
-    assert!(bundle_dir.join("Dockerfile").exists());
-    assert!(bundle_dir.join("Cargo.toml").exists());
-    assert!(!bundle_dir.join("Cargo.lock").exists());
+    // .gitignored files should NOT be in the bundle
+    assert!(!bundle_dir.join("target").exists());
+    // Tracked files should be
+    assert!(bundle_dir.join("src/main.rs").exists());
+    assert!(bundle_dir.join(".gitignore").exists());
+}
+
+#[test]
+fn bundle_excludes_propel_dirs() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path();
+
+    std::fs::create_dir_all(project.join("src")).unwrap();
+    std::fs::create_dir_all(project.join(".propel")).unwrap();
+    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
+    std::fs::write(project.join("src/main.rs"), "fn main() {}").unwrap();
+    std::fs::write(project.join(".propel/Dockerfile"), "custom").unwrap();
+
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+
+    let bundle_dir = create_bundle(project, "FROM rust\n").unwrap();
+
+    // .propel/ should be excluded by PROPEL_EXCLUDES
+    assert!(!bundle_dir.join(".propel").exists());
+    assert!(bundle_dir.join("src/main.rs").exists());
 }
 
 #[test]
 fn bundle_cleans_previous_bundle() {
     let tmp = TempDir::new().unwrap();
     let project = tmp.path();
-
-    std::fs::create_dir_all(project.join("src")).unwrap();
-    std::fs::write(project.join("Cargo.toml"), "[package]\nname = \"test\"").unwrap();
-    std::fs::write(project.join("src/main.rs"), "fn main() {}").unwrap();
+    init_git_project(project);
 
     // Create first bundle
     let bundle1 = create_bundle(project, "FROM rust:1\n").unwrap();
@@ -162,9 +392,74 @@ fn bundle_copies_nested_src_dirs() {
     std::fs::write(project.join("src/main.rs"), "fn main() {}").unwrap();
     std::fs::write(project.join("src/handlers/mod.rs"), "pub fn handle() {}").unwrap();
 
+    Command::new("git")
+        .args(["init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.email", "test@test.com"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["config", "user.name", "Test"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["add", "."])
+        .current_dir(project)
+        .output()
+        .unwrap();
+    Command::new("git")
+        .args(["commit", "-m", "init"])
+        .current_dir(project)
+        .output()
+        .unwrap();
+
     let bundle_dir = create_bundle(project, "FROM rust\n").unwrap();
 
     assert!(bundle_dir.join("src/handlers/mod.rs").exists());
+}
+
+// ── Dirty Check Tests ──
+
+#[test]
+fn is_dirty_clean_repo() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path();
+    init_git_project(project);
+
+    assert!(!is_dirty(project).unwrap());
+}
+
+#[test]
+fn is_dirty_with_uncommitted_changes() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path();
+    init_git_project(project);
+
+    // Modify a tracked file without committing
+    std::fs::write(
+        project.join("src/main.rs"),
+        "fn main() { println!(\"dirty\"); }",
+    )
+    .unwrap();
+
+    assert!(is_dirty(project).unwrap());
+}
+
+#[test]
+fn is_dirty_with_untracked_file() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path();
+    init_git_project(project);
+
+    // Add an untracked file
+    std::fs::write(project.join("new_file.txt"), "hello").unwrap();
+
+    assert!(is_dirty(project).unwrap());
 }
 
 // ── Eject Tests ──

@@ -109,3 +109,61 @@ fn load_empty_config_returns_defaults() {
     let config = PropelConfig::load(tmp.path()).unwrap();
     assert_eq!(config.project.region, "us-central1");
 }
+
+// ── include / env Tests ──
+
+#[test]
+fn load_defaults_include_is_none() {
+    let tmp = TempDir::new().unwrap();
+    let config = PropelConfig::load(tmp.path()).unwrap();
+
+    assert!(config.build.include.is_none());
+    assert!(config.build.env.is_empty());
+}
+
+#[test]
+fn load_include_paths() {
+    let tmp = TempDir::new().unwrap();
+    let toml = r#"
+[build]
+include = ["migrations/", "templates/"]
+"#;
+    std::fs::write(tmp.path().join("propel.toml"), toml).unwrap();
+
+    let config = PropelConfig::load(tmp.path()).unwrap();
+
+    let include = config.build.include.unwrap();
+    assert_eq!(include, vec!["migrations/", "templates/"]);
+}
+
+#[test]
+fn load_build_env() {
+    let tmp = TempDir::new().unwrap();
+    let toml = r#"
+[build.env]
+TEMPLATE_DIR = "/app/templates"
+LUA_DIR = "/app/lua"
+"#;
+    std::fs::write(tmp.path().join("propel.toml"), toml).unwrap();
+
+    let config = PropelConfig::load(tmp.path()).unwrap();
+
+    assert_eq!(config.build.env.len(), 2);
+    assert_eq!(config.build.env["TEMPLATE_DIR"], "/app/templates");
+    assert_eq!(config.build.env["LUA_DIR"], "/app/lua");
+}
+
+#[test]
+fn load_include_empty_vec() {
+    let tmp = TempDir::new().unwrap();
+    let toml = r#"
+[build]
+include = []
+"#;
+    std::fs::write(tmp.path().join("propel.toml"), toml).unwrap();
+
+    let config = PropelConfig::load(tmp.path()).unwrap();
+
+    let include = config.build.include.unwrap();
+    assert!(include.is_empty());
+}

@@ -1,16 +1,16 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-/// Bundles source files for Cloud Build submission.
+/// Files/directories that propel always excludes from bundles,
+/// regardless of .gitignore content.
+const PROPEL_EXCLUDES: &[&str] = &[".propel-bundle", ".propel", ".git"];
+
+/// Bundles project files for Cloud Build submission.
 ///
-/// Creates a `.propel-bundle/` directory containing:
-/// - src/
-/// - Cargo.toml
-/// - Cargo.lock
-/// - Dockerfile (generated)
-pub fn create_bundle(
-    project_dir: &Path,
-    dockerfile_content: &str,
-) -> Result<std::path::PathBuf, BundleError> {
+/// Uses `git ls-files` to respect `.gitignore`, then copies all tracked
+/// and untracked-but-not-ignored files into `.propel-bundle/`.
+/// The generated Dockerfile is written into the bundle.
+pub fn create_bundle(project_dir: &Path, dockerfile_content: &str) -> Result<PathBuf, BundleError> {
     let bundle_dir = project_dir.join(".propel-bundle");
 
     // Clean previous bundle
@@ -25,18 +25,33 @@ pub fn create_bundle(
         source: e,
     })?;
 
-    // Copy source files
-    copy_dir_recursive(&project_dir.join("src"), &bundle_dir.join("src"))?;
+    // Get file list from git (respects .gitignore)
+    let files = git_ls_files(project_dir)?;
 
-    // Copy Cargo.toml and Cargo.lock
-    for filename in &["Cargo.toml", "Cargo.lock"] {
-        let src = project_dir.join(filename);
-        if src.exists() {
-            std::fs::copy(&src, bundle_dir.join(filename)).map_err(|e| BundleError::CopyFile {
-                path: src,
+    // Copy each file into the bundle
+    for relative_path in &files {
+        // Skip propel-specific directories
+        if PROPEL_EXCLUDES
+            .iter()
+            .any(|ex| relative_path.starts_with(ex))
+        {
+            continue;
+        }
+
+        let src = project_dir.join(relative_path);
+        let dst = bundle_dir.join(relative_path);
+
+        if let Some(parent) = dst.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| BundleError::Create {
+                path: parent.to_path_buf(),
                 source: e,
             })?;
         }
+
+        std::fs::copy(&src, &dst).map_err(|e| BundleError::CopyFile {
+            path: src,
+            source: e,
+        })?;
     }
 
     // Write generated Dockerfile
@@ -50,36 +65,62 @@ pub fn create_bundle(
     Ok(bundle_dir)
 }
 
-fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), BundleError> {
-    std::fs::create_dir_all(dst).map_err(|e| BundleError::Create {
-        path: dst.to_path_buf(),
-        source: e,
-    })?;
-
-    for entry in std::fs::read_dir(src).map_err(|e| BundleError::ReadDir {
-        path: src.to_path_buf(),
-        source: e,
-    })? {
-        let entry = entry.map_err(|e| BundleError::ReadDir {
-            path: src.to_path_buf(),
+/// Returns the list of files git considers part of the project:
+/// tracked files + untracked files that are not .gitignored.
+fn git_ls_files(project_dir: &Path) -> Result<Vec<PathBuf>, BundleError> {
+    let output = Command::new("git")
+        .args(["ls-files", "--cached", "--others", "--exclude-standard"])
+        .current_dir(project_dir)
+        .output()
+        .map_err(|e| BundleError::GitCommand {
+            detail: "failed to execute git ls-files".to_owned(),
             source: e,
         })?;
-        let file_type = entry.file_type().map_err(|e| BundleError::ReadDir {
-            path: entry.path(),
-            source: e,
-        })?;
-        let dst_path = dst.join(entry.file_name());
 
-        if file_type.is_dir() {
-            copy_dir_recursive(&entry.path(), &dst_path)?;
-        } else {
-            std::fs::copy(entry.path(), &dst_path).map_err(|e| BundleError::CopyFile {
-                path: entry.path(),
-                source: e,
-            })?;
-        }
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(BundleError::GitFailed {
+            detail: format!(
+                "git ls-files exited with {}: {}",
+                output.status,
+                stderr.trim()
+            ),
+        });
     }
-    Ok(())
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let files: Vec<PathBuf> = stdout
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(PathBuf::from)
+        .collect();
+
+    Ok(files)
+}
+
+/// Checks whether the git working tree has uncommitted changes.
+pub fn is_dirty(project_dir: &Path) -> Result<bool, BundleError> {
+    let output = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(project_dir)
+        .output()
+        .map_err(|e| BundleError::GitCommand {
+            detail: "failed to execute git status".to_owned(),
+            source: e,
+        })?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(BundleError::GitFailed {
+            detail: format!(
+                "git status exited with {}: {}",
+                output.status,
+                stderr.trim()
+            ),
+        });
+    }
+
+    Ok(!output.stdout.is_empty())
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -94,11 +135,6 @@ pub enum BundleError {
         path: std::path::PathBuf,
         source: std::io::Error,
     },
-    #[error("failed to read directory {path}")]
-    ReadDir {
-        path: std::path::PathBuf,
-        source: std::io::Error,
-    },
     #[error("failed to copy file {path}")]
     CopyFile {
         path: std::path::PathBuf,
@@ -109,4 +145,11 @@ pub enum BundleError {
         path: std::path::PathBuf,
         source: std::io::Error,
     },
+    #[error("git command failed: {detail}")]
+    GitCommand {
+        detail: String,
+        source: std::io::Error,
+    },
+    #[error("git failed: {detail}")]
+    GitFailed { detail: String },
 }
