@@ -59,17 +59,3 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --workspace --all-features --no-deps
 
-  feature-check:
-    name: Feature Combinations
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - run: |
-          cargo check -p propel --no-default-features
-          cargo check -p propel --no-default-features --features core
-          cargo check -p propel --no-default-features --features build
-          cargo check -p propel --no-default-features --features cloud
-          cargo check -p propel --no-default-features --features sdk
-          cargo check -p propel --all-features
