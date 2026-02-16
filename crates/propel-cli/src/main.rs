@@ -17,6 +17,8 @@ enum Commands {
         /// Project name
         name: String,
     },
+    /// Add Propel to an existing Rust project
+    Init,
     /// Deploy to Google Cloud Run
     Deploy {
         /// Allow deploying with uncommitted changes
@@ -68,6 +70,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::New { name } => commands::new_project(&name).await?,
+        Commands::Init => commands::init_project().await?,
         Commands::Deploy { allow_dirty } => commands::deploy(allow_dirty).await?,
         Commands::Secret { action } => match action {
             SecretAction::Set { key_value } => commands::secret_set(&key_value).await?,
