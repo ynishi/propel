@@ -9,17 +9,17 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ynishi/propel"
 
 [workspace.dependencies]
 # Internal
-propel-core = { path = "crates/propel-core", version = "0.1.0" }
-propel-build = { path = "crates/propel-build", version = "0.1.0" }
-propel-cloud = { path = "crates/propel-cloud", version = "0.1.0" }
-propel-sdk = { path = "crates/propel-sdk", version = "0.1.0" }
+propel-core = { path = "crates/propel-core", version = "0.2.0" }
+propel-build = { path = "crates/propel-build", version = "0.2.0" }
+propel-cloud = { path = "crates/propel-cloud", version = "0.2.0" }
+propel-sdk = { path = "crates/propel-sdk", version = "0.2.0" }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
