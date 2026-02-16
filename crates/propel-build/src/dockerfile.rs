@@ -25,11 +25,12 @@ use propel_core::{BuildConfig, ProjectMeta};
 pub struct DockerfileGenerator<'a> {
     config: &'a BuildConfig,
     meta: &'a ProjectMeta,
+    port: u16,
 }
 
 impl<'a> DockerfileGenerator<'a> {
-    pub fn new(config: &'a BuildConfig, meta: &'a ProjectMeta) -> Self {
-        Self { config, meta }
+    pub fn new(config: &'a BuildConfig, meta: &'a ProjectMeta, port: u16) -> Self {
+        Self { config, meta, port }
     }
 
     pub fn render(&self) -> String {
@@ -72,7 +73,7 @@ RUN cargo build --release --bin {binary}
 FROM {runtime}
 COPY --from=builder /app/target/release/{binary} /usr/local/bin/app
 WORKDIR /app
-{runtime_copies}{env_directives}EXPOSE 8080
+{runtime_copies}{env_directives}EXPOSE {port}
 CMD ["app"]
 "#,
             base = self.config.base_image,
@@ -82,6 +83,7 @@ CMD ["app"]
             extra_packages = extra_packages,
             runtime_copies = runtime_copies,
             env_directives = env_directives,
+            port = self.port,
         )
     }
 

@@ -8,7 +8,6 @@ description = "Dockerfile and Cloud Build configuration generator for Propel"
 
 [dependencies]
 propel-core = { workspace = true }
-askama = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

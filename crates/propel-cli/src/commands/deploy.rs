@@ -61,7 +61,7 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
         eprintln!("Using ejected Dockerfile from .propel/Dockerfile");
         eject_mod::load_ejected_dockerfile(&project_dir)?
     } else {
-        let generator = DockerfileGenerator::new(&config.build, &meta);
+        let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
         generator.render()
     };
 

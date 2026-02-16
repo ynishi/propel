@@ -19,7 +19,7 @@ edition = "2024"
 [dependencies]
 axum = "0.8"
 tokio = {{ version = "1", features = ["full"] }}
-propel-sdk = "0.1"
+propel-sdk = "0.2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 "#
@@ -44,11 +44,16 @@ async fn main() {
 
     let state = PropelState::load().expect("failed to load config");
 
-    let app = Router::new()
-        .route("/health", get(health))
+    // Public routes (no auth required — used by Cloud Run health checks)
+    let public = Router::new()
+        .route("/health", get(health));
+
+    // Protected routes (Supabase JWT required)
+    let protected = Router::new()
         .route("/", get(hello))
-        .layer(middleware::from_fn_with_state(state.clone(), PropelAuth::verify))
-        .with_state(state);
+        .layer(middleware::from_fn_with_state(state.clone(), PropelAuth::verify));
+
+    let app = public.merge(protected).with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080")
         .await

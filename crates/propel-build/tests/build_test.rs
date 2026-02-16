@@ -55,7 +55,7 @@ fn init_git_project(dir: &Path) {
 fn dockerfile_contains_cargo_chef_stages() {
     let config = BuildConfig::default();
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(output.contains("Stage 1: Planner"));
@@ -75,7 +75,7 @@ fn dockerfile_uses_configured_images() {
         ..Default::default()
     };
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(output.contains("FROM rust:1.82-slim AS chef"));
@@ -89,7 +89,7 @@ fn dockerfile_includes_extra_packages() {
         ..Default::default()
     };
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(output.contains("apt-get install -y libssl-dev pkg-config"));
@@ -99,7 +99,7 @@ fn dockerfile_includes_extra_packages() {
 fn dockerfile_no_extra_packages_when_empty() {
     let config = BuildConfig::default();
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(!output.contains("apt-get install"));
@@ -113,7 +113,7 @@ fn dockerfile_uses_custom_binary_name() {
         version: "0.1.0".to_owned(),
         binary_name: "custom-bin".to_owned(),
     };
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(output.contains("--bin custom-bin"));
@@ -124,10 +124,21 @@ fn dockerfile_uses_custom_binary_name() {
 fn dockerfile_exposes_port_8080() {
     let config = BuildConfig::default();
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(output.contains("EXPOSE 8080"));
+}
+
+#[test]
+fn dockerfile_exposes_custom_port() {
+    let config = BuildConfig::default();
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta, 3000);
+    let output = generator.render();
+
+    assert!(output.contains("EXPOSE 3000"));
+    assert!(!output.contains("EXPOSE 8080"));
 }
 
 // ── Dockerfile: include / env Tests ──
@@ -136,7 +147,7 @@ fn dockerfile_exposes_port_8080() {
 fn dockerfile_default_include_none_copies_all() {
     let config = BuildConfig::default();
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     // include=None → runtime gets COPY . .
@@ -151,7 +162,7 @@ fn dockerfile_include_some_copies_only_specified() {
         ..Default::default()
     };
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     // Should have individual COPY directives, not COPY . .
@@ -171,7 +182,7 @@ fn dockerfile_include_empty_vec_no_runtime_copy() {
         ..Default::default()
     };
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     let runtime_section = output.split("Stage 4: Runtime").nth(1).unwrap();
@@ -192,7 +203,7 @@ fn dockerfile_build_env_generates_env_directives() {
         ..Default::default()
     };
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(output.contains("ENV LUA_DIR=/app/lua"));
@@ -203,7 +214,7 @@ fn dockerfile_build_env_generates_env_directives() {
 fn dockerfile_no_env_when_empty() {
     let config = BuildConfig::default();
     let meta = default_meta();
-    let generator = DockerfileGenerator::new(&config, &meta);
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
     let output = generator.render();
 
     assert!(!output.contains("ENV "));
