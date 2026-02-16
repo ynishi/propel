@@ -81,6 +81,15 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
         println!("No secrets found in Secret Manager");
     } else {
         println!("Injecting {} secret(s) from Secret Manager", secrets.len());
+
+        // Grant Cloud Run SA access to each secret
+        let project_number = client.get_project_number(gcp_project_id).await?;
+        let sa = format!("{project_number}-compute@developer.gserviceaccount.com");
+        for secret in &secrets {
+            client
+                .grant_secret_access(gcp_project_id, secret, &sa)
+                .await?;
+        }
     }
 
     // Deploy to Cloud Run

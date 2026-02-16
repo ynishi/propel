@@ -504,6 +504,47 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         Ok(())
     }
 
+    pub async fn get_project_number(&self, project_id: &str) -> Result<String, DeployError> {
+        let output = self
+            .executor
+            .exec(&args([
+                "projects",
+                "describe",
+                project_id,
+                "--format",
+                "value(projectNumber)",
+            ]))
+            .await
+            .map_err(|e| DeployError::Deploy { source: e })?;
+
+        Ok(output.trim().to_owned())
+    }
+
+    pub async fn grant_secret_access(
+        &self,
+        project_id: &str,
+        secret_name: &str,
+        service_account: &str,
+    ) -> Result<(), SecretError> {
+        let member = format!("serviceAccount:{service_account}");
+        self.executor
+            .exec(&args([
+                "secrets",
+                "add-iam-policy-binding",
+                secret_name,
+                "--project",
+                project_id,
+                "--member",
+                &member,
+                "--role",
+                "roles/secretmanager.secretAccessor",
+            ]))
+            .await
+            .map_err(|e| SecretError::GrantAccess { source: e })?;
+
+        Ok(())
+    }
+
     pub async fn list_secrets(&self, project_id: &str) -> Result<Vec<String>, SecretError> {
         let output = self
             .executor
@@ -636,4 +677,7 @@ pub enum SecretError {
 
     #[error("failed to list secrets")]
     List { source: GcloudError },
+
+    #[error("failed to grant secret access")]
+    GrantAccess { source: GcloudError },
 }

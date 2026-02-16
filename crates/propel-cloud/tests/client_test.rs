@@ -433,3 +433,63 @@ async fn list_secrets_empty() {
 
     assert!(secrets.is_empty());
 }
+
+#[tokio::test]
+async fn get_project_number_returns_number() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"projects".to_owned())
+                && args.contains(&"describe".to_owned())
+                && args.contains(&"value(projectNumber)".to_owned())
+        })
+        .returning(|_| Ok("123456789\n".to_owned()));
+
+    let client = GcloudClient::with_executor(mock);
+    let number = client.get_project_number("my-project").await.unwrap();
+
+    assert_eq!(number, "123456789");
+}
+
+#[tokio::test]
+async fn grant_secret_access_calls_add_iam_policy_binding() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"add-iam-policy-binding".to_owned())
+                && args.contains(&"MY_SECRET".to_owned())
+                && args.contains(&"serviceAccount:123-compute@developer.gserviceaccount.com".to_owned())
+                && args.contains(&"roles/secretmanager.secretAccessor".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .grant_secret_access("proj", "MY_SECRET", "123-compute@developer.gserviceaccount.com")
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn grant_secret_access_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| args.contains(&"add-iam-policy-binding".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "permission denied".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .grant_secret_access("proj", "SECRET", "sa@example.com")
+        .await;
+
+    assert!(matches!(result, Err(SecretError::GrantAccess { .. })));
+}
