@@ -3,6 +3,7 @@ use crate::gcloud::GcloudError;
 /// Abstraction over gcloud CLI execution for testability.
 ///
 /// Production code uses [`RealExecutor`], tests use mockall-generated mocks.
+// Trait is consumed internally + tests only; Send bound on the trait itself suffices.
 #[allow(async_fn_in_trait)]
 pub trait GcloudExecutor: Send + Sync {
     /// Execute a gcloud command and capture stdout.

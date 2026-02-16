@@ -31,7 +31,11 @@ enum Commands {
     /// Eject Dockerfile for manual customization
     Eject,
     /// Delete Cloud Run service, images, and local bundle
-    Destroy,
+    Destroy {
+        /// Skip confirmation prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
     /// Check GCP setup and readiness
     Doctor,
     /// Show Cloud Run service status
@@ -70,7 +74,7 @@ async fn main() -> anyhow::Result<()> {
             SecretAction::List => commands::secret_list().await?,
         },
         Commands::Eject => commands::eject().await?,
-        Commands::Destroy => commands::destroy().await?,
+        Commands::Destroy { yes } => commands::destroy(yes).await?,
         Commands::Doctor => commands::doctor().await?,
         Commands::Status => commands::status().await?,
         Commands::Logs => commands::logs().await?,

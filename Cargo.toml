@@ -54,9 +54,6 @@ dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Template
-askama = "0.12"
-
 # Testing
 mockall = "0.13"
 assert_cmd = "2"

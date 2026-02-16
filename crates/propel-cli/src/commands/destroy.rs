@@ -1,9 +1,10 @@
 use propel_cloud::GcloudClient;
 use propel_core::{ProjectMeta, PropelConfig};
+use std::io::Write;
 use std::path::PathBuf;
 
 /// Delete Cloud Run service, container image, and local bundle.
-pub async fn destroy() -> anyhow::Result<()> {
+pub async fn destroy(skip_confirm: bool) -> anyhow::Result<()> {
     let project_dir = PathBuf::from(".");
     let client = GcloudClient::new();
 
@@ -16,6 +17,25 @@ pub async fn destroy() -> anyhow::Result<()> {
 
     let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
     let region = &config.project.region;
+
+    if !skip_confirm {
+        println!("This will delete:");
+        println!("  - Cloud Run service '{service_name}' in {region}");
+        println!("  - Container images in Artifact Registry");
+        println!("  - Local .propel-bundle/");
+        println!();
+        print!("Are you sure? [y/N] ");
+        std::io::stdout().flush()?;
+
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+
+        if !matches!(input.trim(), "y" | "Y" | "yes" | "YES") {
+            println!("Aborted.");
+            return Ok(());
+        }
+    }
+
     let repo_name = "propel";
     let image_tag = format!(
         "{region}-docker.pkg.dev/{project}/{repo}/{service}",
