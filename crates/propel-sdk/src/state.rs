@@ -15,7 +15,8 @@ impl PropelState {
     /// Load state from environment variables.
     ///
     /// Call this in your `main()`:
-    /// ```ignore
+    /// ```rust,no_run
+    /// use propel_sdk::PropelState;
     /// let state = PropelState::load().expect("failed to load config");
     /// ```
     pub fn load() -> Result<Self, SdkError> {

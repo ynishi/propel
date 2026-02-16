@@ -13,6 +13,7 @@ use crate::PropelState;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SupabaseClaims {
     pub sub: String,
+    pub aud: String,
     pub email: Option<String>,
     pub role: Option<String>,
     pub exp: usize,
@@ -22,12 +23,14 @@ pub struct SupabaseClaims {
 /// Axum middleware that verifies Supabase JWT tokens.
 ///
 /// Usage:
-/// ```ignore
-/// use axum::{Router, middleware};
+/// ```rust,no_run
+/// use axum::{Router, middleware, routing::get};
 /// use propel_sdk::{PropelState, PropelAuth};
 ///
+/// async fn handler() -> &'static str { "ok" }
+///
 /// let state = PropelState::load().unwrap();
-/// let app = Router::new()
+/// let app: Router = Router::new()
 ///     .route("/api/protected", get(handler))
 ///     .layer(middleware::from_fn_with_state(state.clone(), PropelAuth::verify))
 ///     .with_state(state);

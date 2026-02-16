@@ -19,14 +19,18 @@
 //! propel = "0.2"
 //! ```
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! use std::path::Path;
 //! use propel::{PropelConfig, ProjectMeta};
 //! use propel::build::DockerfileGenerator;
 //!
-//! let config = PropelConfig::load(".")?;
-//! let meta = ProjectMeta::from_cargo_toml(".")?;
-//! let generator = DockerfileGenerator::new(&config, &meta, 8080);
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let config = PropelConfig::load(Path::new("."))?;
+//! let meta = ProjectMeta::from_cargo_toml(Path::new("."))?;
+//! let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
 //! let dockerfile = generator.render();
+//! # Ok(())
+//! # }
 //! ```
 
 // Core types flattened into root namespace for convenience.
