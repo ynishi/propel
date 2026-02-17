@@ -34,7 +34,7 @@ async fn preflight_all_checks_pass() {
 
     // auth
     mock.expect_exec()
-        .withf(|args| args.contains(&"print-identity-token".to_owned()))
+        .withf(|args| args.contains(&"print-access-token".to_owned()))
         .returning(|_| Ok("ya29.token\n".to_owned()));
 
     // project describe
@@ -98,7 +98,7 @@ async fn preflight_not_authenticated() {
 
     // auth fails
     mock.expect_exec()
-        .withf(|args| args.contains(&"print-identity-token".to_owned()))
+        .withf(|args| args.contains(&"print-access-token".to_owned()))
         .returning(|_| {
             Err(GcloudError::CommandFailed {
                 args: vec![],
@@ -121,7 +121,7 @@ async fn preflight_project_not_accessible() {
         .returning(|_| Ok("495.0.0\n".to_owned()));
 
     mock.expect_exec()
-        .withf(|args| args.contains(&"print-identity-token".to_owned()))
+        .withf(|args| args.contains(&"print-access-token".to_owned()))
         .returning(|_| Ok("ya29.token\n".to_owned()));
 
     mock.expect_exec()
@@ -153,7 +153,7 @@ async fn preflight_disabled_apis_reported() {
         .returning(|_| Ok("495.0.0\n".to_owned()));
 
     mock.expect_exec()
-        .withf(|args| args.contains(&"print-identity-token".to_owned()))
+        .withf(|args| args.contains(&"print-access-token".to_owned()))
         .returning(|_| Ok("ya29.token\n".to_owned()));
 
     mock.expect_exec()
@@ -624,12 +624,15 @@ async fn ensure_oidc_provider_creates_new() {
                 && args
                     .iter()
                     .any(|a| a.contains("token.actions.githubusercontent.com"))
+                && args
+                    .iter()
+                    .any(|a| a.contains("assertion.repository == 'owner/repo'"))
         })
         .returning(|_| Ok(String::new()));
 
     let client = GcloudClient::with_executor(mock);
     let created = client
-        .ensure_oidc_provider("proj", "propel-github", "github")
+        .ensure_oidc_provider("proj", "propel-github", "github", "owner/repo")
         .await
         .unwrap();
 
@@ -652,7 +655,7 @@ async fn ensure_oidc_provider_already_exists() {
 
     let client = GcloudClient::with_executor(mock);
     let created = client
-        .ensure_oidc_provider("proj", "propel-github", "github")
+        .ensure_oidc_provider("proj", "propel-github", "github", "owner/repo")
         .await
         .unwrap();
 

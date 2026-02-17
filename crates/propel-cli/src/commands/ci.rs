@@ -77,7 +77,7 @@ pub async fn ci_init() -> anyhow::Result<()> {
     }
 
     let created = client
-        .ensure_oidc_provider(gcp_project_id, WIF_POOL_ID, WIF_PROVIDER_ID)
+        .ensure_oidc_provider(gcp_project_id, WIF_POOL_ID, WIF_PROVIDER_ID, &github_repo)
         .await?;
     if created {
         println!("  Created OIDC Provider: {WIF_PROVIDER_ID}");

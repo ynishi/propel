@@ -48,7 +48,7 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         // 2. Authenticated
         match self
             .executor
-            .exec(&args(["auth", "print-identity-token", "--quiet"]))
+            .exec(&args(["auth", "print-access-token", "--quiet"]))
             .await
         {
             Ok(_) => report.authenticated = true,
@@ -640,30 +640,36 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         project_id: &str,
         pool_id: &str,
         provider_id: &str,
+        github_repo: &str,
     ) -> Result<bool, WifError> {
-        match self
-            .executor
-            .exec(&args([
-                "iam",
-                "workload-identity-pools",
-                "providers",
-                "create-oidc",
-                provider_id,
-                "--project",
-                project_id,
-                "--location",
-                "global",
-                "--workload-identity-pool",
-                pool_id,
-                "--display-name",
-                "GitHub",
-                "--attribute-mapping",
-                "google.subject=assertion.sub,attribute.repository=assertion.repository",
-                "--issuer-uri",
-                "https://token.actions.githubusercontent.com",
-            ]))
-            .await
-        {
+        let attribute_condition = format!("assertion.repository == '{github_repo}'");
+
+        let cmd: Vec<String> = [
+            "iam",
+            "workload-identity-pools",
+            "providers",
+            "create-oidc",
+            provider_id,
+            "--project",
+            project_id,
+            "--location",
+            "global",
+            "--workload-identity-pool",
+            pool_id,
+            "--display-name",
+            "GitHub",
+            "--attribute-mapping",
+            "google.subject=assertion.sub,attribute.repository=assertion.repository",
+            "--attribute-condition",
+            &attribute_condition,
+            "--issuer-uri",
+            "https://token.actions.githubusercontent.com",
+        ]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+
+        match self.executor.exec(&cmd).await {
             Ok(_) => Ok(true),
             Err(ref e) if is_already_exists(e) => Ok(false),
             Err(e) => Err(WifError::CreateProvider { source: e }),
