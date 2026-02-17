@@ -18,7 +18,14 @@ pub async fn secret_set(key_value: &str) -> anyhow::Result<()> {
     let client = GcloudClient::new();
     client.set_secret(project_id, key, value).await?;
 
-    println!("Secret '{key}' set successfully");
+    // Grant Cloud Run default SA access to read this secret.
+    // This runs locally where the user has admin permissions,
+    // so deploy (CI) only needs secretmanager.viewer.
+    let project_number = client.get_project_number(project_id).await?;
+    let sa = format!("{project_number}-compute@developer.gserviceaccount.com");
+    client.grant_secret_access(project_id, key, &sa).await?;
+
+    println!("Secret '{key}' set successfully (Cloud Run SA granted access)");
     Ok(())
 }
 

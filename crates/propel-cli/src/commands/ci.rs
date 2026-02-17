@@ -5,16 +5,16 @@ use std::process::Stdio;
 
 /// IAM roles required for the CI deploy service account.
 ///
-/// - `secretmanager.admin`: deploy lists secrets and grants Cloud Run SA access (setIamPolicy)
-/// - `storage.admin`: Cloud Build reads/writes build artifacts in GCS
+/// Secret access (secretAccessor) is granted per-secret at `propel secret set`
+/// time, so CI only needs viewer to list secret names for --update-secrets.
 const CI_SA_ROLES: &[&str] = &[
     "roles/run.admin",
     "roles/cloudbuild.builds.editor",
     "roles/artifactregistry.writer",
-    "roles/secretmanager.admin",
+    "roles/secretmanager.viewer",
     "roles/iam.serviceAccountUser",
     "roles/serviceusage.serviceUsageViewer",
-    "roles/storage.admin",
+    "roles/storage.objectAdmin",
     "roles/viewer",
 ];
 
