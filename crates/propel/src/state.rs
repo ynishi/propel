@@ -1,14 +1,39 @@
+use std::fmt;
+
+use secrecy::SecretString;
+
 use crate::error::SdkError;
 
 /// Application state that loads configuration from environment variables.
 ///
 /// Locally reads from `.env` via dotenvy, in production reads from
 /// Cloud Run environment variables (injected via Secret Manager).
-#[derive(Debug, Clone)]
+///
+/// Sensitive fields (`supabase_anon_key`, `supabase_jwt_secret`,
+/// `server_key`) are wrapped in [`SecretString`] to prevent accidental
+/// logging or debug output.
+#[derive(Clone)]
 pub struct PropelState {
     pub supabase_url: String,
-    pub supabase_anon_key: String,
-    pub supabase_jwt_secret: String,
+    pub supabase_anon_key: SecretString,
+    pub supabase_jwt_secret: SecretString,
+    /// Optional pre-shared key for server-to-server authentication.
+    /// Set `PROPEL_SERVER_KEY` environment variable to enable `X-Server-Key` header auth.
+    pub server_key: Option<SecretString>,
+}
+
+impl fmt::Debug for PropelState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PropelState")
+            .field("supabase_url", &self.supabase_url)
+            .field("supabase_anon_key", &"[REDACTED]")
+            .field("supabase_jwt_secret", &"[REDACTED]")
+            .field(
+                "server_key",
+                &self.server_key.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 
 impl PropelState {
@@ -26,11 +51,19 @@ impl PropelState {
 
         let state = Self {
             supabase_url: required_env("SUPABASE_URL")?,
-            supabase_anon_key: required_env("SUPABASE_ANON_KEY")?,
-            supabase_jwt_secret: required_env("SUPABASE_JWT_SECRET")?,
+            supabase_anon_key: SecretString::from(required_env("SUPABASE_ANON_KEY")?),
+            supabase_jwt_secret: SecretString::from(required_env("SUPABASE_JWT_SECRET")?),
+            server_key: std::env::var("PROPEL_SERVER_KEY")
+                .ok()
+                .filter(|k| !k.trim().is_empty())
+                .map(SecretString::from),
         };
 
-        tracing::debug!(supabase_url = %state.supabase_url, "PropelState loaded");
+        tracing::debug!(
+            supabase_url = %state.supabase_url,
+            server_key_configured = state.server_key.is_some(),
+            "PropelState loaded",
+        );
         Ok(state)
     }
 }

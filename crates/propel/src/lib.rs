@@ -4,7 +4,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! propel = "0.2"
+//! propel = "0.4"
 //! ```
 //!
 //! ```rust,no_run
@@ -27,6 +27,6 @@ pub mod auth;
 pub mod error;
 pub mod state;
 
-pub use auth::{PropelAuth, SupabaseClaims};
+pub use auth::{AuthIdentity, PropelAuth, SupabaseClaims};
 pub use error::SdkError;
 pub use state::PropelState;

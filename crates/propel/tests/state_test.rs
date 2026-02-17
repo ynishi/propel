@@ -1,4 +1,5 @@
 use propel::state::PropelState;
+use secrecy::ExposeSecret;
 use std::sync::Mutex;
 
 /// Environment variable tests mutate process-global state, so we serialize them.
@@ -59,8 +60,8 @@ fn load_succeeds_with_all_env_vars() {
         || {
             let state = PropelState::load().unwrap();
             assert_eq!(state.supabase_url, "https://example.supabase.co");
-            assert_eq!(state.supabase_anon_key, "anon-key-123");
-            assert_eq!(state.supabase_jwt_secret, "jwt-secret-456");
+            assert_eq!(state.supabase_anon_key.expose_secret(), "anon-key-123");
+            assert_eq!(state.supabase_jwt_secret.expose_secret(), "jwt-secret-456");
         },
     );
 }
@@ -76,8 +77,11 @@ fn load_preserves_exact_values() {
         || {
             let state = PropelState::load().unwrap();
             assert_eq!(state.supabase_url, "https://a.b.c");
-            assert_eq!(state.supabase_anon_key, "key-with-special=chars/+");
-            assert_eq!(state.supabase_jwt_secret, "s3cr3t!@#$%");
+            assert_eq!(
+                state.supabase_anon_key.expose_secret(),
+                "key-with-special=chars/+"
+            );
+            assert_eq!(state.supabase_jwt_secret.expose_secret(), "s3cr3t!@#$%");
         },
     );
 }

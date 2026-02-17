@@ -47,6 +47,7 @@ tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # Auth
 jsonwebtoken = "9"
+secrecy = "0.10"
 
 # Environment
 dotenvy = "0.15"
