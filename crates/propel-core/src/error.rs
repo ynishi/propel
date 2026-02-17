@@ -33,4 +33,7 @@ pub enum Error {
 
     #[error("missing package.name in Cargo.toml at {0}")]
     MissingPackageName(PathBuf),
+
+    #[error("invalid include path {path:?}: {reason}")]
+    InvalidIncludePath { path: String, reason: &'static str },
 }

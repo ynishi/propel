@@ -190,6 +190,7 @@ impl PropelConfig {
                 path: config_path,
                 source: e,
             })?;
+            config.build.validate_include_paths()?;
             tracing::debug!(
                 region = %config.project.region,
                 port = config.cloud_run.port,
@@ -200,6 +201,32 @@ impl PropelConfig {
             tracing::debug!(path = %config_path.display(), "propel.toml not found, using defaults");
             Ok(Self::default())
         }
+    }
+}
+
+impl BuildConfig {
+    /// Validate `include` paths, rejecting empty or whitespace-only entries.
+    fn validate_include_paths(&self) -> crate::Result<()> {
+        let paths = match &self.include {
+            Some(p) => p,
+            None => return Ok(()),
+        };
+        for path in paths {
+            let trimmed = path.trim();
+            if trimmed.is_empty() {
+                return Err(crate::Error::InvalidIncludePath {
+                    path: path.clone(),
+                    reason: "path must not be empty or whitespace-only",
+                });
+            }
+            if trimmed.trim_end_matches('/').is_empty() {
+                return Err(crate::Error::InvalidIncludePath {
+                    path: path.clone(),
+                    reason: "bare \"/\" is not a valid include path",
+                });
+            }
+        }
+        Ok(())
     }
 }
 

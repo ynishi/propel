@@ -154,6 +154,48 @@ LUA_DIR = "/app/lua"
 }
 
 #[test]
+fn load_include_rejects_empty_path() {
+    let tmp = TempDir::new().unwrap();
+    let toml = r#"
+[build]
+include = ["migrations/", ""]
+"#;
+    std::fs::write(tmp.path().join("propel.toml"), toml).unwrap();
+
+    let err = PropelConfig::load(tmp.path()).unwrap_err().to_string();
+    assert!(err.contains("empty"), "expected empty error, got: {err}");
+}
+
+#[test]
+fn load_include_rejects_whitespace_only_path() {
+    let tmp = TempDir::new().unwrap();
+    let toml = r#"
+[build]
+include = ["  "]
+"#;
+    std::fs::write(tmp.path().join("propel.toml"), toml).unwrap();
+
+    let err = PropelConfig::load(tmp.path()).unwrap_err().to_string();
+    assert!(err.contains("empty"), "expected empty error, got: {err}");
+}
+
+#[test]
+fn load_include_rejects_bare_slash() {
+    let tmp = TempDir::new().unwrap();
+    let toml = r#"
+[build]
+include = ["/"]
+"#;
+    std::fs::write(tmp.path().join("propel.toml"), toml).unwrap();
+
+    let err = PropelConfig::load(tmp.path()).unwrap_err().to_string();
+    assert!(
+        err.contains("bare \"/\""),
+        "expected bare slash error, got: {err}"
+    );
+}
+
+#[test]
 fn load_include_empty_vec() {
     let tmp = TempDir::new().unwrap();
     let toml = r#"
