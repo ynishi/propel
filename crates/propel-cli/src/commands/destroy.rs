@@ -73,7 +73,7 @@ pub async fn destroy(
         }
     }
 
-    let repo_name = "propel";
+    let repo_name = super::ARTIFACT_REPO_NAME;
     let image_tag = format!(
         "{region}-docker.pkg.dev/{project}/{repo}/{service}",
         region = region,

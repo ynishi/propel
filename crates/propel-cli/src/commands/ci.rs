@@ -4,6 +4,9 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 /// IAM roles required for the CI deploy service account.
+///
+/// - `secretmanager.admin`: deploy lists secrets and grants Cloud Run SA access (setIamPolicy)
+/// - `storage.admin`: Cloud Build reads/writes build artifacts in GCS
 const CI_SA_ROLES: &[&str] = &[
     "roles/run.admin",
     "roles/cloudbuild.builds.editor",
@@ -237,9 +240,28 @@ async fn exec_gh(gh_args: &[&str]) -> anyhow::Result<String> {
     }
 }
 
-/// Set a GitHub Actions secret.
+/// Set a GitHub Actions secret via stdin to avoid exposing the value in process args.
 async fn set_gh_secret(name: &str, value: &str) -> anyhow::Result<()> {
-    exec_gh(&["secret", "set", name, "--body", value]).await?;
+    use tokio::io::AsyncWriteExt;
+
+    let mut child = tokio::process::Command::new("gh")
+        .args(["secret", "set", name])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(value.as_bytes()).await?;
+        stdin.shutdown().await?;
+    }
+
+    let output = child.wait_with_output().await?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("gh secret set {name}: {stderr}");
+    }
+
     Ok(())
 }
 
@@ -361,5 +383,50 @@ mod tests {
         assert!(yaml.contains("propel deploy --allow-dirty"));
         assert!(yaml.contains("id-token: write"));
         assert!(yaml.contains("cargo install propel-cli"));
+    }
+
+    mod proptests {
+        use super::*;
+        use proptest::prelude::*;
+
+        proptest! {
+            #[test]
+            fn parse_github_repo_never_panics(s in "\\PC*") {
+                let _ = parse_github_repo(&s);
+            }
+
+            #[test]
+            fn parse_github_repo_ssh_roundtrip(
+                owner in "[a-zA-Z0-9_-]{1,39}",
+                repo in "[a-zA-Z0-9._-]{1,100}",
+            ) {
+                let url = format!("git@github.com:{owner}/{repo}.git");
+                let result = parse_github_repo(&url);
+                prop_assert_eq!(result, Some(format!("{owner}/{repo}")));
+            }
+
+            #[test]
+            fn parse_github_repo_https_roundtrip(
+                owner in "[a-zA-Z0-9_-]{1,39}",
+                repo in "[a-zA-Z0-9._-]{1,100}",
+            ) {
+                let url = format!("https://github.com/{owner}/{repo}.git");
+                let result = parse_github_repo(&url);
+                prop_assert_eq!(result, Some(format!("{owner}/{repo}")));
+            }
+
+            #[test]
+            fn parse_github_repo_non_github_returns_none(
+                host in "[a-z]{3,10}\\.[a-z]{2,5}",
+                path in "[a-zA-Z0-9/_-]{1,50}",
+            ) {
+                prop_assume!(host != "github.com");
+                let ssh = format!("git@{host}:{path}.git");
+                prop_assert_eq!(parse_github_repo(&ssh), None);
+
+                let https = format!("https://{host}/{path}.git");
+                prop_assert_eq!(parse_github_repo(&https), None);
+            }
+        }
     }
 }

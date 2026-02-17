@@ -28,7 +28,7 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
 
     let region = &config.project.region;
-    let repo_name = "propel";
+    let repo_name = super::ARTIFACT_REPO_NAME;
     let image_tag = format!(
         "{region}-docker.pkg.dev/{project}/{repo}/{service}:latest",
         region = region,

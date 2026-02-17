@@ -9,6 +9,9 @@ mod new;
 mod secret;
 mod status;
 
+/// Artifact Registry repository name used for container images.
+pub(crate) const ARTIFACT_REPO_NAME: &str = "propel";
+
 pub use ci::ci_init;
 pub use deploy::deploy;
 pub use destroy::destroy;
