@@ -14,4 +14,4 @@ categories = ["web-programming", "authentication"]
 release = false
 
 [dependencies]
-propel = { path = "../propel", version = "0.3.1" }
+propel = { path = "../propel", version = "0.4.0" }
