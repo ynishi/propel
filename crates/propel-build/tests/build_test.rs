@@ -220,6 +220,53 @@ fn dockerfile_no_env_when_empty() {
     assert!(!output.contains("ENV "));
 }
 
+#[test]
+fn dockerfile_include_file_not_treated_as_directory() {
+    let config = BuildConfig {
+        include: Some(vec!["seeds.txt".to_owned()]),
+        ..Default::default()
+    };
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
+    let output = generator.render();
+
+    let runtime_section = output.split("Stage 4: Runtime").nth(1).unwrap();
+    // File path must NOT get trailing slash
+    assert!(
+        runtime_section.contains("COPY seeds.txt ./seeds.txt"),
+        "expected file COPY without trailing slash, got:\n{runtime_section}"
+    );
+    assert!(
+        !runtime_section.contains("seeds.txt/"),
+        "file path must not be treated as directory"
+    );
+}
+
+#[test]
+fn dockerfile_include_mixed_files_and_dirs() {
+    let config = BuildConfig {
+        include: Some(vec![
+            "lua/".to_owned(),
+            "seeds.txt".to_owned(),
+            "config.toml".to_owned(),
+            "templates/".to_owned(),
+        ]),
+        ..Default::default()
+    };
+    let meta = default_meta();
+    let generator = DockerfileGenerator::new(&config, &meta, 8080);
+    let output = generator.render();
+
+    let runtime_section = output.split("Stage 4: Runtime").nth(1).unwrap();
+    // Directories keep trailing slash
+    assert!(runtime_section.contains("COPY lua/ ./lua/"));
+    assert!(runtime_section.contains("COPY templates/ ./templates/"));
+    // Files do NOT get trailing slash
+    assert!(runtime_section.contains("COPY seeds.txt ./seeds.txt"));
+    assert!(runtime_section.contains("COPY config.toml ./config.toml"));
+    assert!(!runtime_section.contains("COPY . ."));
+}
+
 // ── Bundle Tests ──
 
 #[test]

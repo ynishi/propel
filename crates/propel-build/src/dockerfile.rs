@@ -98,6 +98,9 @@ CMD ["app"]
     ///
     /// - `include = None`: copies entire build context (`COPY . .`)
     /// - `include = Some(paths)`: copies only specified paths
+    ///
+    /// Paths ending with `/` are treated as directories (`COPY dir/ ./dir/`).
+    /// Paths without a trailing `/` are treated as files (`COPY file ./file`).
     fn render_runtime_copies(&self) -> String {
         match &self.config.include {
             None => "COPY . .\n".to_owned(),
@@ -105,8 +108,12 @@ CMD ["app"]
             Some(paths) => {
                 let mut out = String::new();
                 for path in paths {
-                    let trimmed = path.trim_end_matches('/');
-                    let _ = writeln!(out, "COPY {trimmed}/ ./{trimmed}/");
+                    if path.ends_with('/') {
+                        let trimmed = path.trim_end_matches('/');
+                        let _ = writeln!(out, "COPY {trimmed}/ ./{trimmed}/");
+                    } else {
+                        let _ = writeln!(out, "COPY {path} ./{path}");
+                    }
                 }
                 out
             }

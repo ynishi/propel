@@ -14,19 +14,7 @@ pub async fn init_project() -> anyhow::Result<()> {
     if propel_toml_path.exists() {
         eprintln!("propel.toml already exists, skipping");
     } else {
-        let propel_toml = r#"[project]
-# region = "us-central1"
-# gcp_project_id = "your-project-id"
-
-[build]
-# extra_packages = []
-
-[cloud_run]
-# memory = "512Mi"
-# cpu = 1
-# max_instances = 10
-"#;
-        std::fs::write(propel_toml_path, propel_toml)?;
+        std::fs::write(propel_toml_path, super::PROPEL_TOML_TEMPLATE)?;
         created.push("propel.toml");
     }
 

@@ -55,19 +55,7 @@ async fn main() {
     std::fs::write(project_dir.join("src/main.rs"), main_rs)?;
 
     // propel.toml
-    let propel_toml = r#"[project]
-# region = "us-central1"
-# gcp_project_id = "your-project-id"
-
-[build]
-# extra_packages = []
-
-[cloud_run]
-# memory = "512Mi"
-# cpu = 1
-# max_instances = 10
-"#;
-    std::fs::write(project_dir.join("propel.toml"), propel_toml)?;
+    std::fs::write(project_dir.join("propel.toml"), super::PROPEL_TOML_TEMPLATE)?;
 
     // .gitignore
     let gitignore = "/target\n.env\n.propel-bundle/\n";
