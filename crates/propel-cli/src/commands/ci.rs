@@ -8,11 +8,11 @@ use std::process::Stdio;
 /// Secret access (secretAccessor) is granted per-secret at `propel secret set`
 /// time, so CI only needs viewer to list secret names for --update-secrets.
 const CI_SA_ROLES: &[&str] = &[
-    "roles/run.admin",
-    "roles/cloudbuild.builds.editor",
     "roles/artifactregistry.writer",
-    "roles/secretmanager.viewer",
+    "roles/cloudbuild.builds.editor",
     "roles/iam.serviceAccountUser",
+    "roles/run.admin",
+    "roles/secretmanager.viewer",
     "roles/serviceusage.serviceUsageViewer",
     "roles/storage.objectAdmin",
     "roles/viewer",
@@ -22,6 +22,10 @@ pub(super) const WIF_POOL_ID: &str = "propel-github";
 const WIF_PROVIDER_ID: &str = "github";
 pub(super) const CI_SA_ID: &str = "propel-deploy";
 pub(super) const WORKFLOW_PATH: &str = ".github/workflows/propel-deploy.yml";
+
+/// GitHub Actions secret names managed by `ci init` / `destroy --include-ci`.
+pub(super) const GH_SECRET_NAMES: &[&str] =
+    &["GCP_PROJECT_ID", "WIF_PROVIDER", "WIF_SERVICE_ACCOUNT"];
 
 /// Set up GitHub Actions CI/CD pipeline.
 pub async fn ci_init() -> anyhow::Result<()> {
@@ -44,7 +48,12 @@ pub async fn ci_init() -> anyhow::Result<()> {
     let gh_version = exec_gh(&["--version"])
         .await
         .map_err(|_| anyhow::anyhow!("gh CLI not found. Install: https://cli.github.com"))?;
-    let gh_ver_line = gh_version.lines().next().unwrap_or(&gh_version).trim();
+    // lines().next() returns None only when output is completely empty
+    let gh_ver_line = gh_version
+        .lines()
+        .next()
+        .unwrap_or("unknown version")
+        .trim();
     println!("  gh CLI: {gh_ver_line}");
 
     // gh auth
@@ -59,9 +68,7 @@ pub async fn ci_init() -> anyhow::Result<()> {
 
     // propel.toml + gcp_project_id
     let config = PropelConfig::load(&project_dir)?;
-    let gcp_project_id = config.project.gcp_project_id.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("gcp_project_id not set in propel.toml — set [project].gcp_project_id")
-    })?;
+    let gcp_project_id = super::require_gcp_project_id(&config)?;
     println!("  GCP Project: {gcp_project_id}");
 
     // Required GCP APIs check

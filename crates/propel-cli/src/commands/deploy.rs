@@ -21,9 +21,7 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     let config = PropelConfig::load(&project_dir)?;
     let meta = ProjectMeta::from_cargo_toml(&project_dir)?;
 
-    let gcp_project_id = config.project.gcp_project_id.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("gcp_project_id not set in propel.toml — set [project].gcp_project_id")
-    })?;
+    let gcp_project_id = super::require_gcp_project_id(&config)?;
 
     let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
 
@@ -78,10 +76,13 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     // Discover secrets in Secret Manager and inject into Cloud Run.
     // IAM binding (secretAccessor) is granted at `propel secret set` time,
     // so deploy only needs secretmanager.viewer to list.
-    let secrets = client
-        .list_secrets(gcp_project_id)
-        .await
-        .unwrap_or_default();
+    let secrets = match client.list_secrets(gcp_project_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Warning: could not list secrets: {e}");
+            vec![]
+        }
+    };
     if secrets.is_empty() {
         println!("No secrets found in Secret Manager");
     } else {

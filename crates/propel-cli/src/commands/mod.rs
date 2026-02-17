@@ -9,8 +9,17 @@ mod new;
 mod secret;
 mod status;
 
+use propel_core::PropelConfig;
+
 /// Artifact Registry repository name used for container images.
 pub(crate) const ARTIFACT_REPO_NAME: &str = "propel";
+
+/// Extract `gcp_project_id` from config, returning a clear error if not set.
+fn require_gcp_project_id(config: &PropelConfig) -> anyhow::Result<&str> {
+    config.project.gcp_project_id.as_deref().ok_or_else(|| {
+        anyhow::anyhow!("gcp_project_id not set in propel.toml — set [project].gcp_project_id")
+    })
+}
 
 pub use ci::ci_init;
 pub use deploy::deploy;

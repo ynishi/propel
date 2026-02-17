@@ -9,11 +9,7 @@ pub async fn secret_set(key_value: &str) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("expected KEY=VALUE format"))?;
 
     let config = PropelConfig::load(&PathBuf::from("."))?;
-    let project_id = config
-        .project
-        .gcp_project_id
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("gcp_project_id not set in propel.toml"))?;
+    let project_id = super::require_gcp_project_id(&config)?;
 
     let client = GcloudClient::new();
     client.set_secret(project_id, key, value).await?;
@@ -31,11 +27,7 @@ pub async fn secret_set(key_value: &str) -> anyhow::Result<()> {
 
 pub async fn secret_delete(key: &str, skip_confirm: bool) -> anyhow::Result<()> {
     let config = PropelConfig::load(&PathBuf::from("."))?;
-    let project_id = config
-        .project
-        .gcp_project_id
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("gcp_project_id not set in propel.toml"))?;
+    let project_id = super::require_gcp_project_id(&config)?;
 
     if !skip_confirm {
         print!("Delete secret '{key}'? [y/N] ");
@@ -59,11 +51,7 @@ pub async fn secret_delete(key: &str, skip_confirm: bool) -> anyhow::Result<()> 
 
 pub async fn secret_list() -> anyhow::Result<()> {
     let config = PropelConfig::load(&PathBuf::from("."))?;
-    let project_id = config
-        .project
-        .gcp_project_id
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("gcp_project_id not set in propel.toml"))?;
+    let project_id = super::require_gcp_project_id(&config)?;
 
     let client = GcloudClient::new();
     let secrets = client.list_secrets(project_id).await?;

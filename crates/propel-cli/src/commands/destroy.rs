@@ -22,9 +22,7 @@ pub async fn destroy(
     let config = PropelConfig::load(&project_dir)?;
     let meta = ProjectMeta::from_cargo_toml(&project_dir)?;
 
-    let gcp_project_id = config.project.gcp_project_id.as_deref().ok_or_else(|| {
-        anyhow::anyhow!("gcp_project_id not set in propel.toml — set [project].gcp_project_id")
-    })?;
+    let gcp_project_id = super::require_gcp_project_id(&config)?;
 
     let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
     let region = &config.project.region;
@@ -134,7 +132,7 @@ pub async fn destroy(
         }
 
         // GitHub Secrets (best-effort)
-        for secret_name in &["GCP_PROJECT_ID", "WIF_PROVIDER", "WIF_SERVICE_ACCOUNT"] {
+        for secret_name in ci::GH_SECRET_NAMES {
             match ci::delete_gh_secret(secret_name).await {
                 Ok(()) => println!("  Deleted GitHub Secret: {secret_name}"),
                 Err(e) => println!("  Skipped GitHub Secret {secret_name} ({e})"),
