@@ -43,6 +43,14 @@ pub async fn secret_delete(key: &str, skip_confirm: bool) -> anyhow::Result<()> 
     }
 
     let client = GcloudClient::new();
+
+    // Revoke Cloud Run SA's access before deleting the secret itself.
+    let project_number = client.get_project_number(project_id).await?;
+    let sa = format!("{project_number}-compute@developer.gserviceaccount.com");
+    if let Err(e) = client.revoke_secret_access(project_id, key, &sa).await {
+        eprintln!("Warning: could not revoke SA binding for '{key}': {e}");
+    }
+
     client.delete_secret(project_id, key).await?;
 
     println!("Secret '{key}' deleted");

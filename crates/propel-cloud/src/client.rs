@@ -569,6 +569,31 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         Ok(())
     }
 
+    pub async fn revoke_secret_access(
+        &self,
+        project_id: &str,
+        secret_name: &str,
+        service_account: &str,
+    ) -> Result<(), SecretError> {
+        let member = format!("serviceAccount:{service_account}");
+        self.executor
+            .exec(&args([
+                "secrets",
+                "remove-iam-policy-binding",
+                secret_name,
+                "--project",
+                project_id,
+                "--member",
+                &member,
+                "--role",
+                "roles/secretmanager.secretAccessor",
+            ]))
+            .await
+            .map_err(|e| SecretError::RevokeAccess { source: e })?;
+
+        Ok(())
+    }
+
     pub async fn list_secrets(&self, project_id: &str) -> Result<Vec<String>, SecretError> {
         let output = self
             .executor
@@ -939,6 +964,9 @@ pub enum SecretError {
 
     #[error("failed to grant secret access")]
     GrantAccess { source: GcloudError },
+
+    #[error("failed to revoke secret access")]
+    RevokeAccess { source: GcloudError },
 
     #[error("failed to delete secret")]
     Delete { source: GcloudError },

@@ -502,6 +502,54 @@ async fn grant_secret_access_failure() {
 }
 
 #[tokio::test]
+async fn revoke_secret_access_calls_remove_iam_policy_binding() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"remove-iam-policy-binding".to_owned())
+                && args.contains(&"MY_SECRET".to_owned())
+                && args.contains(
+                    &"serviceAccount:123-compute@developer.gserviceaccount.com".to_owned(),
+                )
+                && args.contains(&"roles/secretmanager.secretAccessor".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .revoke_secret_access(
+            "proj",
+            "MY_SECRET",
+            "123-compute@developer.gserviceaccount.com",
+        )
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn revoke_secret_access_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| args.contains(&"remove-iam-policy-binding".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "not found".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .revoke_secret_access("proj", "SECRET", "sa@example.com")
+        .await;
+
+    assert!(matches!(result, Err(SecretError::RevokeAccess { .. })));
+}
+
+#[tokio::test]
 async fn delete_secret_success() {
     let mut mock = MockExecutor::new();
 

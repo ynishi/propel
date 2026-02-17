@@ -5,8 +5,10 @@ use std::process::Stdio;
 
 /// IAM roles required for the CI deploy service account.
 ///
-/// Secret access (secretAccessor) is granted per-secret at `propel secret set`
-/// time, so CI only needs viewer to list secret names for --update-secrets.
+/// - `run.admin` is required (not `run.developer`) because `--allow-unauthenticated`
+///   needs `run.services.setIamPolicy`.
+/// - Secret access (secretAccessor) is granted per-secret at `propel secret set`
+///   time, so CI only needs viewer to list secret names for --update-secrets.
 const CI_SA_ROLES: &[&str] = &[
     "roles/artifactregistry.writer",
     "roles/cloudbuild.builds.editor",
@@ -418,6 +420,16 @@ mod tests {
                 repo in "[a-zA-Z0-9._-]{1,100}",
             ) {
                 let url = format!("https://github.com/{owner}/{repo}.git");
+                let result = parse_github_repo(&url);
+                prop_assert_eq!(result, Some(format!("{owner}/{repo}")));
+            }
+
+            #[test]
+            fn parse_github_repo_http_roundtrip(
+                owner in "[a-zA-Z0-9_-]{1,39}",
+                repo in "[a-zA-Z0-9._-]{1,100}",
+            ) {
+                let url = format!("http://github.com/{owner}/{repo}.git");
                 let result = parse_github_repo(&url);
                 prop_assert_eq!(result, Some(format!("{owner}/{repo}")));
             }
