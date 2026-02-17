@@ -11,6 +11,8 @@ const CI_SA_ROLES: &[&str] = &[
     "roles/secretmanager.admin",
     "roles/iam.serviceAccountUser",
     "roles/serviceusage.serviceUsageViewer",
+    "roles/storage.admin",
+    "roles/viewer",
 ];
 
 pub(super) const WIF_POOL_ID: &str = "propel-github";
