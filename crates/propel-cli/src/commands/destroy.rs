@@ -1,7 +1,8 @@
+use super::ci;
 use propel_cloud::GcloudClient;
 use propel_core::{ProjectMeta, PropelConfig};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Mask a secret name, showing first 5 chars + "***".
 fn mask_name(name: &str) -> String {
@@ -10,7 +11,11 @@ fn mask_name(name: &str) -> String {
 }
 
 /// Delete Cloud Run service, container image, and local bundle.
-pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Result<()> {
+pub async fn destroy(
+    skip_confirm: bool,
+    include_secrets: bool,
+    include_ci: bool,
+) -> anyhow::Result<()> {
     let project_dir = PathBuf::from(".");
     let client = GcloudClient::new();
 
@@ -25,10 +30,13 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
     let region = &config.project.region;
 
     // Discover secrets for display / deletion
-    let secrets = client
-        .list_secrets(gcp_project_id)
-        .await
-        .unwrap_or_default();
+    let secrets = match client.list_secrets(gcp_project_id).await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Warning: could not list secrets: {e}");
+            vec![]
+        }
+    };
 
     if !skip_confirm {
         println!("This will delete:");
@@ -41,6 +49,15 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
             for s in &secrets {
                 println!("      {}", mask_name(s));
             }
+        }
+
+        if include_ci {
+            println!("  - Workload Identity Pool 'propel-github'");
+            println!(
+                "  - Service Account 'propel-deploy@{gcp_project_id}.iam.gserviceaccount.com'"
+            );
+            println!("  - GitHub Secrets (GCP_PROJECT_ID, WIF_PROVIDER, WIF_SERVICE_ACCOUNT)");
+            println!("  - {}", ci::WORKFLOW_PATH);
         }
 
         println!();
@@ -93,7 +110,46 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
         }
     }
 
-    // 4. Clean local bundle
+    // 4. Delete CI/CD resources if requested
+    if include_ci {
+        println!("Deleting CI/CD resources...");
+
+        // WIF Pool (providers are cascade-deleted)
+        match client
+            .delete_wif_pool(gcp_project_id, ci::WIF_POOL_ID)
+            .await
+        {
+            Ok(()) => println!("  Deleted WIF Pool '{}'", ci::WIF_POOL_ID),
+            Err(e) => println!("  Skipped WIF Pool ({})", e),
+        }
+
+        // Service Account
+        let sa_email = format!("{}@{gcp_project_id}.iam.gserviceaccount.com", ci::CI_SA_ID);
+        match client
+            .delete_service_account(gcp_project_id, &sa_email)
+            .await
+        {
+            Ok(()) => println!("  Deleted Service Account"),
+            Err(e) => println!("  Skipped Service Account ({})", e),
+        }
+
+        // GitHub Secrets (best-effort)
+        for secret_name in &["GCP_PROJECT_ID", "WIF_PROVIDER", "WIF_SERVICE_ACCOUNT"] {
+            match ci::delete_gh_secret(secret_name).await {
+                Ok(()) => println!("  Deleted GitHub Secret: {secret_name}"),
+                Err(e) => println!("  Skipped GitHub Secret {secret_name} ({e})"),
+            }
+        }
+
+        // Workflow file
+        let workflow = Path::new(ci::WORKFLOW_PATH);
+        if workflow.exists() {
+            std::fs::remove_file(workflow)?;
+            println!("  Deleted {}", ci::WORKFLOW_PATH);
+        }
+    }
+
+    // 5. Clean local bundle
     let bundle_dir = project_dir.join(".propel-bundle");
     if bundle_dir.exists() {
         std::fs::remove_dir_all(&bundle_dir)?;
@@ -103,7 +159,7 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
     println!();
     println!("Destroy complete.");
 
-    // Show remaining secrets hint
+    // Show remaining resource hints
     if !include_secrets && !secrets.is_empty() {
         println!();
         println!(
@@ -111,6 +167,12 @@ pub async fn destroy(skip_confirm: bool, include_secrets: bool) -> anyhow::Resul
             secrets.len()
         );
         println!("  To delete them: propel destroy --include-secrets");
+    }
+
+    if !include_ci && Path::new(ci::WORKFLOW_PATH).exists() {
+        println!();
+        println!("Note: CI/CD resources remain (WIF, Service Account, GitHub Secrets, workflow).");
+        println!("  To delete them: propel destroy --include-ci");
     }
 
     Ok(())

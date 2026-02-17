@@ -40,13 +40,28 @@ enum Commands {
         /// Also delete secrets from Secret Manager
         #[arg(long)]
         include_secrets: bool,
+        /// Also delete CI/CD resources (WIF, service account, GitHub Secrets, workflow)
+        #[arg(long)]
+        include_ci: bool,
     },
     /// Check GCP setup and readiness
     Doctor,
     /// Show Cloud Run service status
     Status,
     /// Stream Cloud Run logs
-    Logs,
+    Logs {
+        /// Tail logs in real-time
+        #[arg(long, short = 'f')]
+        follow: bool,
+        /// Number of log entries to show (default: 100)
+        #[arg(long, short = 'n')]
+        tail: Option<u32>,
+    },
+    /// Manage CI/CD pipeline
+    Ci {
+        #[command(subcommand)]
+        action: CiAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -58,6 +73,20 @@ enum SecretAction {
     },
     /// List all secrets
     List,
+    /// Delete a secret
+    Delete {
+        /// Secret name
+        key: String,
+        /// Skip confirmation prompt
+        #[arg(long, short = 'y')]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum CiAction {
+    /// Set up GitHub Actions CI/CD pipeline (WIF + Service Account + GitHub Secrets + workflow)
+    Init,
 }
 
 #[tokio::main]
@@ -78,15 +107,20 @@ async fn main() -> anyhow::Result<()> {
         Commands::Secret { action } => match action {
             SecretAction::Set { key_value } => commands::secret_set(&key_value).await?,
             SecretAction::List => commands::secret_list().await?,
+            SecretAction::Delete { key, yes } => commands::secret_delete(&key, yes).await?,
         },
         Commands::Eject => commands::eject().await?,
         Commands::Destroy {
             yes,
             include_secrets,
-        } => commands::destroy(yes, include_secrets).await?,
+            include_ci,
+        } => commands::destroy(yes, include_secrets, include_ci).await?,
         Commands::Doctor => commands::doctor().await?,
         Commands::Status => commands::status().await?,
-        Commands::Logs => commands::logs().await?,
+        Commands::Logs { follow, tail } => commands::logs(follow, tail).await?,
+        Commands::Ci { action } => match action {
+            CiAction::Init => commands::ci_init().await?,
+        },
     }
 
     Ok(())

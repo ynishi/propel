@@ -1,6 +1,6 @@
 use mockall::mock;
 use propel_cloud::client::{
-    CloudBuildError, DeployError, GcloudClient, PreflightError, SecretError,
+    CloudBuildError, DeployError, GcloudClient, PreflightError, SecretError, WifError,
 };
 use propel_cloud::executor::GcloudExecutor;
 use propel_cloud::gcloud::GcloudError;
@@ -537,4 +537,448 @@ async fn delete_secret_failure() {
     let result = client.delete_secret("proj", "GONE").await;
 
     assert!(matches!(result, Err(SecretError::Delete { .. })));
+}
+
+// ── WIF Pool Tests ──
+
+#[tokio::test]
+async fn ensure_wif_pool_creates_new() {
+    let mut mock = MockExecutor::new();
+
+    // create succeeds
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"workload-identity-pools".to_owned())
+                && args.contains(&"create".to_owned())
+                && args.contains(&"propel-github".to_owned())
+                && args.contains(&"global".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let created = client
+        .ensure_wif_pool("proj", "propel-github")
+        .await
+        .unwrap();
+
+    assert!(created);
+}
+
+#[tokio::test]
+async fn ensure_wif_pool_already_exists() {
+    let mut mock = MockExecutor::new();
+
+    // create fails with ALREADY_EXISTS
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"workload-identity-pools".to_owned())
+                && args.contains(&"create".to_owned())
+        })
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "ALREADY_EXISTS: resource already exists".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let created = client
+        .ensure_wif_pool("proj", "propel-github")
+        .await
+        .unwrap();
+
+    assert!(!created);
+}
+
+#[tokio::test]
+async fn ensure_wif_pool_create_fails() {
+    let mut mock = MockExecutor::new();
+
+    // create fails with non-ALREADY_EXISTS error
+    mock.expect_exec()
+        .withf(|args| args.contains(&"create".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "permission denied".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.ensure_wif_pool("proj", "propel-github").await;
+
+    assert!(matches!(result, Err(WifError::CreatePool { .. })));
+}
+
+// ── OIDC Provider Tests ──
+
+#[tokio::test]
+async fn ensure_oidc_provider_creates_new() {
+    let mut mock = MockExecutor::new();
+
+    // create-oidc succeeds
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"create-oidc".to_owned())
+                && args.contains(&"github".to_owned())
+                && args
+                    .iter()
+                    .any(|a| a.contains("token.actions.githubusercontent.com"))
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let created = client
+        .ensure_oidc_provider("proj", "propel-github", "github")
+        .await
+        .unwrap();
+
+    assert!(created);
+}
+
+#[tokio::test]
+async fn ensure_oidc_provider_already_exists() {
+    let mut mock = MockExecutor::new();
+
+    // create-oidc fails with ALREADY_EXISTS
+    mock.expect_exec()
+        .withf(|args| args.contains(&"create-oidc".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "ALREADY_EXISTS: provider already exists".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let created = client
+        .ensure_oidc_provider("proj", "propel-github", "github")
+        .await
+        .unwrap();
+
+    assert!(!created);
+}
+
+// ── Service Account Tests ──
+
+#[tokio::test]
+async fn ensure_service_account_creates_new() {
+    let mut mock = MockExecutor::new();
+
+    // create succeeds
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"service-accounts".to_owned())
+                && args.contains(&"create".to_owned())
+                && args.contains(&"propel-deploy".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let created = client
+        .ensure_service_account("proj", "propel-deploy", "Propel CI Deploy")
+        .await
+        .unwrap();
+
+    assert!(created);
+}
+
+#[tokio::test]
+async fn ensure_service_account_already_exists() {
+    let mut mock = MockExecutor::new();
+
+    // create fails with already exists
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"service-accounts".to_owned()) && args.contains(&"create".to_owned())
+        })
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "Service account already exists".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let created = client
+        .ensure_service_account("proj", "propel-deploy", "Propel CI Deploy")
+        .await
+        .unwrap();
+
+    assert!(!created);
+}
+
+// ── IAM Role Binding Tests ──
+
+#[tokio::test]
+async fn bind_iam_roles_success() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"add-iam-policy-binding".to_owned())
+                && args.contains(&"projects".to_owned())
+        })
+        .times(2)
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .bind_iam_roles(
+            "proj",
+            "sa@proj.iam.gserviceaccount.com",
+            &["roles/run.admin", "roles/cloudbuild.builds.editor"],
+        )
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn bind_iam_roles_partial_failure() {
+    let mut mock = MockExecutor::new();
+
+    // First role succeeds
+    mock.expect_exec()
+        .withf(|args| args.contains(&"roles/run.admin".to_owned()))
+        .returning(|_| Ok(String::new()));
+
+    // Second role fails
+    mock.expect_exec()
+        .withf(|args| args.contains(&"roles/cloudbuild.builds.editor".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "permission denied".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .bind_iam_roles(
+            "proj",
+            "sa@proj.iam.gserviceaccount.com",
+            &["roles/run.admin", "roles/cloudbuild.builds.editor"],
+        )
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(WifError::BindRole { ref role, .. }) if role == "roles/cloudbuild.builds.editor"
+    ));
+}
+
+// ── WIF → SA Binding Tests ──
+
+#[tokio::test]
+async fn bind_wif_to_sa_success() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"add-iam-policy-binding".to_owned())
+                && args.contains(&"roles/iam.workloadIdentityUser".to_owned())
+                && args
+                    .iter()
+                    .any(|a| a.contains("attribute.repository/owner/repo"))
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .bind_wif_to_sa(
+            "proj",
+            "123456",
+            "propel-github",
+            "sa@proj.iam.gserviceaccount.com",
+            "owner/repo",
+        )
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn bind_wif_to_sa_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| args.contains(&"add-iam-policy-binding".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "failed".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .bind_wif_to_sa("proj", "123456", "pool", "sa@example.com", "owner/repo")
+        .await;
+
+    assert!(matches!(result, Err(WifError::BindWif { .. })));
+}
+
+// ── Delete WIF Pool Tests ──
+
+#[tokio::test]
+async fn delete_wif_pool_success() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"workload-identity-pools".to_owned())
+                && args.contains(&"delete".to_owned())
+                && args.contains(&"propel-github".to_owned())
+                && args.contains(&"--quiet".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.delete_wif_pool("proj", "propel-github").await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn delete_wif_pool_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"workload-identity-pools".to_owned())
+                && args.contains(&"delete".to_owned())
+        })
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "NOT_FOUND".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.delete_wif_pool("proj", "propel-github").await;
+
+    assert!(matches!(result, Err(WifError::DeletePool { .. })));
+}
+
+// ── Delete Service Account Tests ──
+
+#[tokio::test]
+async fn delete_service_account_success() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"service-accounts".to_owned())
+                && args.contains(&"delete".to_owned())
+                && args.contains(&"--quiet".to_owned())
+        })
+        .returning(|_| Ok(String::new()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .delete_service_account("proj", "sa@proj.iam.gserviceaccount.com")
+        .await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn delete_service_account_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"service-accounts".to_owned()) && args.contains(&"delete".to_owned())
+        })
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "NOT_FOUND".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .delete_service_account("proj", "sa@proj.iam.gserviceaccount.com")
+        .await;
+
+    assert!(matches!(result, Err(WifError::DeleteServiceAccount { .. })));
+}
+
+// ── Logs Tests ──
+
+#[tokio::test]
+async fn read_logs_with_custom_limit() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec_streaming()
+        .withf(|args| {
+            args.contains(&"logs".to_owned())
+                && args.contains(&"read".to_owned())
+                && args.contains(&"50".to_owned())
+        })
+        .returning(|_| Ok(()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.read_logs("my-svc", "proj", "us-central1", 50).await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn read_logs_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec_streaming()
+        .withf(|args| args.contains(&"read".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "not found".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.read_logs("svc", "proj", "us-central1", 100).await;
+
+    assert!(matches!(result, Err(DeployError::Logs { .. })));
+}
+
+#[tokio::test]
+async fn tail_logs_success() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec_streaming()
+        .withf(|args| {
+            args.contains(&"logs".to_owned())
+                && args.contains(&"tail".to_owned())
+                && args.contains(&"my-svc".to_owned())
+        })
+        .returning(|_| Ok(()));
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.tail_logs("my-svc", "proj", "us-central1").await;
+
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn tail_logs_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec_streaming()
+        .withf(|args| args.contains(&"tail".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "not found".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.tail_logs("svc", "proj", "us-central1").await;
+
+    assert!(matches!(result, Err(DeployError::Logs { .. })));
 }

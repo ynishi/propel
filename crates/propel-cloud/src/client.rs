@@ -430,7 +430,9 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         service_name: &str,
         project_id: &str,
         region: &str,
+        limit: u32,
     ) -> Result<(), DeployError> {
+        let limit_str = limit.to_string();
         self.executor
             .exec_streaming(&args([
                 "run",
@@ -443,10 +445,32 @@ impl<E: GcloudExecutor> GcloudClient<E> {
                 "--region",
                 region,
                 "--limit",
-                "100",
+                &limit_str,
             ]))
             .await
-            .map_err(|e| DeployError::Deploy { source: e })
+            .map_err(|e| DeployError::Logs { source: e })
+    }
+
+    pub async fn tail_logs(
+        &self,
+        service_name: &str,
+        project_id: &str,
+        region: &str,
+    ) -> Result<(), DeployError> {
+        self.executor
+            .exec_streaming(&args([
+                "run",
+                "services",
+                "logs",
+                "tail",
+                service_name,
+                "--project",
+                project_id,
+                "--region",
+                region,
+            ]))
+            .await
+            .map_err(|e| DeployError::Logs { source: e })
     }
 
     // ── Secret Manager ──
@@ -581,12 +605,218 @@ impl<E: GcloudExecutor> GcloudClient<E> {
 
         Ok(())
     }
+
+    // ── Workload Identity Federation ──
+
+    /// Create a Workload Identity Pool (idempotent).
+    /// Returns `true` if created, `false` if already existed.
+    pub async fn ensure_wif_pool(&self, project_id: &str, pool_id: &str) -> Result<bool, WifError> {
+        match self
+            .executor
+            .exec(&args([
+                "iam",
+                "workload-identity-pools",
+                "create",
+                pool_id,
+                "--project",
+                project_id,
+                "--location",
+                "global",
+                "--display-name",
+                "Propel GitHub Actions",
+            ]))
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(ref e) if is_already_exists(e) => Ok(false),
+            Err(e) => Err(WifError::CreatePool { source: e }),
+        }
+    }
+
+    /// Create an OIDC provider in a WIF pool (idempotent).
+    /// Returns `true` if created, `false` if already existed.
+    pub async fn ensure_oidc_provider(
+        &self,
+        project_id: &str,
+        pool_id: &str,
+        provider_id: &str,
+    ) -> Result<bool, WifError> {
+        match self
+            .executor
+            .exec(&args([
+                "iam",
+                "workload-identity-pools",
+                "providers",
+                "create-oidc",
+                provider_id,
+                "--project",
+                project_id,
+                "--location",
+                "global",
+                "--workload-identity-pool",
+                pool_id,
+                "--display-name",
+                "GitHub",
+                "--attribute-mapping",
+                "google.subject=assertion.sub,attribute.repository=assertion.repository",
+                "--issuer-uri",
+                "https://token.actions.githubusercontent.com",
+            ]))
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(ref e) if is_already_exists(e) => Ok(false),
+            Err(e) => Err(WifError::CreateProvider { source: e }),
+        }
+    }
+
+    /// Create a service account (idempotent).
+    /// Returns `true` if created, `false` if already existed.
+    pub async fn ensure_service_account(
+        &self,
+        project_id: &str,
+        sa_id: &str,
+        display_name: &str,
+    ) -> Result<bool, WifError> {
+        match self
+            .executor
+            .exec(&args([
+                "iam",
+                "service-accounts",
+                "create",
+                sa_id,
+                "--project",
+                project_id,
+                "--display-name",
+                display_name,
+            ]))
+            .await
+        {
+            Ok(_) => Ok(true),
+            Err(ref e) if is_already_exists(e) => Ok(false),
+            Err(e) => Err(WifError::CreateServiceAccount { source: e }),
+        }
+    }
+
+    /// Bind IAM roles to a service account.
+    pub async fn bind_iam_roles(
+        &self,
+        project_id: &str,
+        sa_email: &str,
+        roles: &[&str],
+    ) -> Result<(), WifError> {
+        let member = format!("serviceAccount:{sa_email}");
+        for role in roles {
+            self.executor
+                .exec(&args([
+                    "projects",
+                    "add-iam-policy-binding",
+                    project_id,
+                    "--member",
+                    &member,
+                    "--role",
+                    role,
+                    "--quiet",
+                ]))
+                .await
+                .map_err(|e| WifError::BindRole {
+                    role: (*role).to_owned(),
+                    source: e,
+                })?;
+        }
+
+        Ok(())
+    }
+
+    /// Bind a WIF pool to a service account, scoped to a GitHub repository.
+    pub async fn bind_wif_to_sa(
+        &self,
+        project_id: &str,
+        project_number: &str,
+        pool_id: &str,
+        sa_email: &str,
+        github_repo: &str,
+    ) -> Result<(), WifError> {
+        let member = format!(
+            "principalSet://iam.googleapis.com/projects/{project_number}/locations/global/workloadIdentityPools/{pool_id}/attribute.repository/{github_repo}"
+        );
+
+        self.executor
+            .exec(&args([
+                "iam",
+                "service-accounts",
+                "add-iam-policy-binding",
+                sa_email,
+                "--project",
+                project_id,
+                "--role",
+                "roles/iam.workloadIdentityUser",
+                "--member",
+                &member,
+            ]))
+            .await
+            .map_err(|e| WifError::BindWif { source: e })?;
+
+        Ok(())
+    }
+
+    /// Delete a Workload Identity Pool (and its providers).
+    pub async fn delete_wif_pool(&self, project_id: &str, pool_id: &str) -> Result<(), WifError> {
+        self.executor
+            .exec(&args([
+                "iam",
+                "workload-identity-pools",
+                "delete",
+                pool_id,
+                "--project",
+                project_id,
+                "--location",
+                "global",
+                "--quiet",
+            ]))
+            .await
+            .map_err(|e| WifError::DeletePool { source: e })?;
+
+        Ok(())
+    }
+
+    /// Delete a service account.
+    pub async fn delete_service_account(
+        &self,
+        project_id: &str,
+        sa_email: &str,
+    ) -> Result<(), WifError> {
+        self.executor
+            .exec(&args([
+                "iam",
+                "service-accounts",
+                "delete",
+                sa_email,
+                "--project",
+                project_id,
+                "--quiet",
+            ]))
+            .await
+            .map_err(|e| WifError::DeleteServiceAccount { source: e })?;
+
+        Ok(())
+    }
 }
 
 // ── Helper ──
 
 fn args<const N: usize>(a: [&str; N]) -> Vec<String> {
     a.iter().map(|s| (*s).to_owned()).collect()
+}
+
+/// Check whether a gcloud error indicates the resource already exists.
+fn is_already_exists(e: &GcloudError) -> bool {
+    match e {
+        GcloudError::CommandFailed { stderr, .. } => {
+            stderr.contains("ALREADY_EXISTS") || stderr.contains("already exists")
+        }
+        _ => false,
+    }
 }
 
 // ── Error types ──
@@ -685,6 +915,9 @@ pub enum CloudBuildError {
 pub enum DeployError {
     #[error("cloud run deployment failed")]
     Deploy { source: GcloudError },
+
+    #[error("failed to read logs")]
+    Logs { source: GcloudError },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -703,4 +936,28 @@ pub enum SecretError {
 
     #[error("failed to delete secret")]
     Delete { source: GcloudError },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum WifError {
+    #[error("failed to create workload identity pool")]
+    CreatePool { source: GcloudError },
+
+    #[error("failed to create OIDC provider")]
+    CreateProvider { source: GcloudError },
+
+    #[error("failed to create service account")]
+    CreateServiceAccount { source: GcloudError },
+
+    #[error("failed to bind IAM role: {role}")]
+    BindRole { role: String, source: GcloudError },
+
+    #[error("failed to bind WIF to service account")]
+    BindWif { source: GcloudError },
+
+    #[error("failed to delete workload identity pool")]
+    DeletePool { source: GcloudError },
+
+    #[error("failed to delete service account")]
+    DeleteServiceAccount { source: GcloudError },
 }

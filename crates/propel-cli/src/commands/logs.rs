@@ -2,7 +2,7 @@ use propel_cloud::GcloudClient;
 use propel_core::PropelConfig;
 use std::path::PathBuf;
 
-pub async fn logs() -> anyhow::Result<()> {
+pub async fn logs(follow: bool, tail: Option<u32>) -> anyhow::Result<()> {
     let config = PropelConfig::load(&PathBuf::from("."))?;
     let project_id = config
         .project
@@ -15,7 +15,15 @@ pub async fn logs() -> anyhow::Result<()> {
     let region = &config.project.region;
 
     let client = GcloudClient::new();
-    client.read_logs(service_name, project_id, region).await?;
+
+    if follow {
+        client.tail_logs(service_name, project_id, region).await?;
+    } else {
+        let limit = tail.unwrap_or(100);
+        client
+            .read_logs(service_name, project_id, region, limit)
+            .await?;
+    }
 
     Ok(())
 }
