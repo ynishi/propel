@@ -209,7 +209,6 @@ async fn submit_build_success() {
             &PathBuf::from("/tmp/bundle"),
             "my-project",
             "gcr.io/my-project/my-service:latest",
-            false,
         )
         .await;
 
@@ -229,7 +228,51 @@ async fn submit_build_failure() {
 
     let client = GcloudClient::with_executor(mock);
     let result = client
-        .submit_build(&PathBuf::from("/tmp/bundle"), "proj", "tag", false)
+        .submit_build(&PathBuf::from("/tmp/bundle"), "proj", "tag")
+        .await;
+
+    assert!(matches!(result, Err(CloudBuildError::Submit { .. })));
+}
+
+#[tokio::test]
+async fn submit_build_captured_returns_output() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"builds".to_owned())
+                && args.contains(&"submit".to_owned())
+                && args.contains(&"--tag".to_owned())
+        })
+        .returning(|_| Ok("BUILD OK\nImage: gcr.io/proj/svc:latest\n".to_owned()));
+
+    let client = GcloudClient::with_executor(mock);
+    let output = client
+        .submit_build_captured(
+            &PathBuf::from("/tmp/bundle"),
+            "my-project",
+            "gcr.io/my-project/my-service:latest",
+        )
+        .await
+        .unwrap();
+
+    assert!(output.contains("BUILD OK"));
+}
+
+#[tokio::test]
+async fn submit_build_captured_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec().returning(|_| {
+        Err(GcloudError::CommandFailed {
+            args: vec![],
+            stderr: "build failed".to_owned(),
+        })
+    });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client
+        .submit_build_captured(&PathBuf::from("/tmp/bundle"), "proj", "tag")
         .await;
 
     assert!(matches!(result, Err(CloudBuildError::Submit { .. })));
@@ -974,9 +1017,7 @@ async fn read_logs_with_custom_limit() {
         .returning(|_| Ok(()));
 
     let client = GcloudClient::with_executor(mock);
-    let result = client
-        .read_logs("my-svc", "proj", "us-central1", 50, false)
-        .await;
+    let result = client.read_logs("my-svc", "proj", "us-central1", 50).await;
 
     assert!(result.is_ok());
 }
@@ -995,8 +1036,48 @@ async fn read_logs_failure() {
         });
 
     let client = GcloudClient::with_executor(mock);
+    let result = client.read_logs("svc", "proj", "us-central1", 100).await;
+
+    assert!(matches!(result, Err(DeployError::Logs { .. })));
+}
+
+#[tokio::test]
+async fn read_logs_captured_returns_output() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"logs".to_owned())
+                && args.contains(&"read".to_owned())
+                && args.contains(&"50".to_owned())
+        })
+        .returning(|_| Ok("2024-01-01 INFO request served\n".to_owned()));
+
+    let client = GcloudClient::with_executor(mock);
+    let output = client
+        .read_logs_captured("my-svc", "proj", "us-central1", 50)
+        .await
+        .unwrap();
+
+    assert!(output.contains("request served"));
+}
+
+#[tokio::test]
+async fn read_logs_captured_failure() {
+    let mut mock = MockExecutor::new();
+
+    mock.expect_exec()
+        .withf(|args| args.contains(&"read".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "not found".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
     let result = client
-        .read_logs("svc", "proj", "us-central1", 100, false)
+        .read_logs_captured("svc", "proj", "us-central1", 100)
         .await;
 
     assert!(matches!(result, Err(DeployError::Logs { .. })));

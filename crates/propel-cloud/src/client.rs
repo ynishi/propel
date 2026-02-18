@@ -284,46 +284,56 @@ impl<E: GcloudExecutor> GcloudClient<E> {
 
     // ── Cloud Build ──
 
-    /// Submit a Cloud Build.
-    ///
-    /// When `capture` is `false`, output is streamed to stdout (CLI use).
-    /// When `capture` is `true`, output is captured and returned (MCP / non-TTY use).
+    /// Submit a Cloud Build with streaming output to stdout (CLI use).
     pub async fn submit_build(
         &self,
         bundle_dir: &Path,
         project_id: &str,
         image_tag: &str,
-        capture: bool,
-    ) -> Result<Option<String>, CloudBuildError> {
+    ) -> Result<(), CloudBuildError> {
         let bundle_str = bundle_dir
             .to_str()
             .ok_or_else(|| CloudBuildError::InvalidPath(bundle_dir.to_path_buf()))?;
 
-        let cmd = args([
-            "builds",
-            "submit",
-            bundle_str,
-            "--project",
-            project_id,
-            "--tag",
-            image_tag,
-            "--quiet",
-        ]);
+        self.executor
+            .exec_streaming(&args([
+                "builds",
+                "submit",
+                bundle_str,
+                "--project",
+                project_id,
+                "--tag",
+                image_tag,
+                "--quiet",
+            ]))
+            .await
+            .map_err(|e| CloudBuildError::Submit { source: e })
+    }
 
-        if capture {
-            let output = self
-                .executor
-                .exec(&cmd)
-                .await
-                .map_err(|e| CloudBuildError::Submit { source: e })?;
-            Ok(Some(output))
-        } else {
-            self.executor
-                .exec_streaming(&cmd)
-                .await
-                .map_err(|e| CloudBuildError::Submit { source: e })?;
-            Ok(None)
-        }
+    /// Submit a Cloud Build with captured output (MCP / non-TTY use).
+    pub async fn submit_build_captured(
+        &self,
+        bundle_dir: &Path,
+        project_id: &str,
+        image_tag: &str,
+    ) -> Result<String, CloudBuildError> {
+        let bundle_str = bundle_dir
+            .to_str()
+            .ok_or_else(|| CloudBuildError::InvalidPath(bundle_dir.to_path_buf()))?;
+
+        self.executor
+            .exec(&args([
+                "builds",
+                "submit",
+                bundle_str,
+                "--project",
+                project_id,
+                "--tag",
+                image_tag,
+                "--quiet",
+            ]))
+            .await
+            .map_err(|e| CloudBuildError::Submit { source: e })
     }
 
     // ── Cloud Run Deploy ──
@@ -443,47 +453,58 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         Ok(())
     }
 
-    /// Read Cloud Run logs.
-    ///
-    /// When `capture` is `false`, output is streamed to stdout (CLI use).
-    /// When `capture` is `true`, output is captured and returned (MCP / non-TTY use).
+    /// Read Cloud Run logs with streaming output to stdout (CLI use).
     pub async fn read_logs(
         &self,
         service_name: &str,
         project_id: &str,
         region: &str,
         limit: u32,
-        capture: bool,
-    ) -> Result<Option<String>, DeployError> {
+    ) -> Result<(), DeployError> {
         let limit_str = limit.to_string();
-        let cmd = args([
-            "run",
-            "services",
-            "logs",
-            "read",
-            service_name,
-            "--project",
-            project_id,
-            "--region",
-            region,
-            "--limit",
-            &limit_str,
-        ]);
+        self.executor
+            .exec_streaming(&args([
+                "run",
+                "services",
+                "logs",
+                "read",
+                service_name,
+                "--project",
+                project_id,
+                "--region",
+                region,
+                "--limit",
+                &limit_str,
+            ]))
+            .await
+            .map_err(|e| DeployError::Logs { source: e })
+    }
 
-        if capture {
-            let output = self
-                .executor
-                .exec(&cmd)
-                .await
-                .map_err(|e| DeployError::Logs { source: e })?;
-            Ok(Some(output))
-        } else {
-            self.executor
-                .exec_streaming(&cmd)
-                .await
-                .map_err(|e| DeployError::Logs { source: e })?;
-            Ok(None)
-        }
+    /// Read Cloud Run logs with captured output (MCP / non-TTY use).
+    pub async fn read_logs_captured(
+        &self,
+        service_name: &str,
+        project_id: &str,
+        region: &str,
+        limit: u32,
+    ) -> Result<String, DeployError> {
+        let limit_str = limit.to_string();
+        self.executor
+            .exec(&args([
+                "run",
+                "services",
+                "logs",
+                "read",
+                service_name,
+                "--project",
+                project_id,
+                "--region",
+                region,
+                "--limit",
+                &limit_str,
+            ]))
+            .await
+            .map_err(|e| DeployError::Logs { source: e })
     }
 
     pub async fn tail_logs(
