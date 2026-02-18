@@ -21,7 +21,7 @@ pub async fn logs(follow: bool, tail: Option<u32>) -> anyhow::Result<()> {
     } else {
         let limit = tail.unwrap_or(100);
         client
-            .read_logs(service_name, project_id, region, limit)
+            .read_logs(service_name, project_id, region, limit, false)
             .await?;
     }
 

@@ -56,6 +56,10 @@ dotenvy = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# MCP (Model Context Protocol)
+rmcp = { version = "0.15", features = ["server", "transport-io", "macros"] }
+schemars = "1.2"
+
 # Testing
 mockall = "0.13"
 assert_cmd = "2"

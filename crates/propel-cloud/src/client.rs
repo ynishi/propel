@@ -1,6 +1,7 @@
 use crate::executor::{GcloudExecutor, RealExecutor};
 use crate::gcloud::GcloudError;
 use propel_core::CloudRunConfig;
+use std::fmt;
 use std::path::Path;
 
 /// GCP operations client, parameterized over the executor for testability.
@@ -283,29 +284,46 @@ impl<E: GcloudExecutor> GcloudClient<E> {
 
     // ── Cloud Build ──
 
+    /// Submit a Cloud Build.
+    ///
+    /// When `capture` is `false`, output is streamed to stdout (CLI use).
+    /// When `capture` is `true`, output is captured and returned (MCP / non-TTY use).
     pub async fn submit_build(
         &self,
         bundle_dir: &Path,
         project_id: &str,
         image_tag: &str,
-    ) -> Result<(), CloudBuildError> {
+        capture: bool,
+    ) -> Result<Option<String>, CloudBuildError> {
         let bundle_str = bundle_dir
             .to_str()
             .ok_or_else(|| CloudBuildError::InvalidPath(bundle_dir.to_path_buf()))?;
 
-        self.executor
-            .exec_streaming(&args([
-                "builds",
-                "submit",
-                bundle_str,
-                "--project",
-                project_id,
-                "--tag",
-                image_tag,
-                "--quiet",
-            ]))
-            .await
-            .map_err(|e| CloudBuildError::Submit { source: e })
+        let cmd = args([
+            "builds",
+            "submit",
+            bundle_str,
+            "--project",
+            project_id,
+            "--tag",
+            image_tag,
+            "--quiet",
+        ]);
+
+        if capture {
+            let output = self
+                .executor
+                .exec(&cmd)
+                .await
+                .map_err(|e| CloudBuildError::Submit { source: e })?;
+            Ok(Some(output))
+        } else {
+            self.executor
+                .exec_streaming(&cmd)
+                .await
+                .map_err(|e| CloudBuildError::Submit { source: e })?;
+            Ok(None)
+        }
     }
 
     // ── Cloud Run Deploy ──
@@ -425,30 +443,47 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         Ok(())
     }
 
+    /// Read Cloud Run logs.
+    ///
+    /// When `capture` is `false`, output is streamed to stdout (CLI use).
+    /// When `capture` is `true`, output is captured and returned (MCP / non-TTY use).
     pub async fn read_logs(
         &self,
         service_name: &str,
         project_id: &str,
         region: &str,
         limit: u32,
-    ) -> Result<(), DeployError> {
+        capture: bool,
+    ) -> Result<Option<String>, DeployError> {
         let limit_str = limit.to_string();
-        self.executor
-            .exec_streaming(&args([
-                "run",
-                "services",
-                "logs",
-                "read",
-                service_name,
-                "--project",
-                project_id,
-                "--region",
-                region,
-                "--limit",
-                &limit_str,
-            ]))
-            .await
-            .map_err(|e| DeployError::Logs { source: e })
+        let cmd = args([
+            "run",
+            "services",
+            "logs",
+            "read",
+            service_name,
+            "--project",
+            project_id,
+            "--region",
+            region,
+            "--limit",
+            &limit_str,
+        ]);
+
+        if capture {
+            let output = self
+                .executor
+                .exec(&cmd)
+                .await
+                .map_err(|e| DeployError::Logs { source: e })?;
+            Ok(Some(output))
+        } else {
+            self.executor
+                .exec_streaming(&cmd)
+                .await
+                .map_err(|e| DeployError::Logs { source: e })?;
+            Ok(None)
+        }
     }
 
     pub async fn tail_logs(
@@ -898,6 +933,51 @@ impl DoctorReport {
             && self.billing.passed
             && self.config_file.passed
             && self.apis.iter().all(|a| a.result.passed)
+    }
+}
+
+impl fmt::Display for DoctorReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Propel Doctor")?;
+        writeln!(f, "------------------------------")?;
+
+        let rows: [(&str, &CheckResult); 4] = [
+            ("gcloud CLI", &self.gcloud),
+            ("Authentication", &self.account),
+            ("GCP Project", &self.project),
+            ("Billing", &self.billing),
+        ];
+
+        for (label, result) in &rows {
+            writeln!(f, "{:<22}{:<4}{}", label, result.icon(), result.detail)?;
+        }
+
+        for api in &self.apis {
+            writeln!(
+                f,
+                "{:<22}{:<4}{}",
+                format!("{} API", api.name),
+                api.result.icon(),
+                api.result.detail,
+            )?;
+        }
+
+        writeln!(
+            f,
+            "{:<22}{:<4}{}",
+            "propel.toml",
+            self.config_file.icon(),
+            self.config_file.detail,
+        )?;
+
+        writeln!(f, "------------------------------")?;
+        if self.all_passed() {
+            write!(f, "All checks passed!")?;
+        } else {
+            write!(f, "Some checks failed — see above for details")?;
+        }
+
+        Ok(())
     }
 }
 

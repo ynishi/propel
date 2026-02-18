@@ -1,10 +1,12 @@
 mod ci;
 mod deploy;
+pub(crate) mod deploy_pipeline;
 mod destroy;
 mod doctor;
 mod eject;
 mod init;
 mod logs;
+pub(crate) mod mcp;
 mod new;
 mod secret;
 mod status;

@@ -62,6 +62,8 @@ enum Commands {
         #[command(subcommand)]
         action: CiAction,
     },
+    /// Start MCP (Model Context Protocol) server
+    Mcp(commands::mcp::McpArgs),
 }
 
 #[derive(Subcommand)]
@@ -121,6 +123,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Ci { action } => match action {
             CiAction::Init => commands::ci_init().await?,
         },
+        Commands::Mcp(args) => commands::mcp::execute(args).await?,
     }
 
     Ok(())

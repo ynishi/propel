@@ -209,6 +209,7 @@ async fn submit_build_success() {
             &PathBuf::from("/tmp/bundle"),
             "my-project",
             "gcr.io/my-project/my-service:latest",
+            false,
         )
         .await;
 
@@ -228,7 +229,7 @@ async fn submit_build_failure() {
 
     let client = GcloudClient::with_executor(mock);
     let result = client
-        .submit_build(&PathBuf::from("/tmp/bundle"), "proj", "tag")
+        .submit_build(&PathBuf::from("/tmp/bundle"), "proj", "tag", false)
         .await;
 
     assert!(matches!(result, Err(CloudBuildError::Submit { .. })));
@@ -973,7 +974,9 @@ async fn read_logs_with_custom_limit() {
         .returning(|_| Ok(()));
 
     let client = GcloudClient::with_executor(mock);
-    let result = client.read_logs("my-svc", "proj", "us-central1", 50).await;
+    let result = client
+        .read_logs("my-svc", "proj", "us-central1", 50, false)
+        .await;
 
     assert!(result.is_ok());
 }
@@ -992,7 +995,9 @@ async fn read_logs_failure() {
         });
 
     let client = GcloudClient::with_executor(mock);
-    let result = client.read_logs("svc", "proj", "us-central1", 100).await;
+    let result = client
+        .read_logs("svc", "proj", "us-central1", 100, false)
+        .await;
 
     assert!(matches!(result, Err(DeployError::Logs { .. })));
 }
@@ -1032,4 +1037,73 @@ async fn tail_logs_failure() {
     let result = client.tail_logs("svc", "proj", "us-central1").await;
 
     assert!(matches!(result, Err(DeployError::Logs { .. })));
+}
+
+// ── DoctorReport Display ──
+
+#[test]
+fn doctor_report_display_all_passed() {
+    let report = propel_cloud::DoctorReport {
+        gcloud: propel_cloud::CheckResult::ok("1.0.0"),
+        account: propel_cloud::CheckResult::ok("user@example.com"),
+        project: propel_cloud::CheckResult::ok("my-project"),
+        billing: propel_cloud::CheckResult::ok("Enabled"),
+        apis: vec![propel_cloud::ApiCheck {
+            name: "run.googleapis.com".to_string(),
+            result: propel_cloud::CheckResult::ok("Enabled"),
+        }],
+        config_file: propel_cloud::CheckResult::ok("Found"),
+    };
+
+    let output = report.to_string();
+    assert!(output.contains("Propel Doctor"));
+    assert!(output.contains("gcloud CLI"));
+    assert!(output.contains("OK"));
+    assert!(output.contains("All checks passed!"));
+    assert!(!output.contains("NG"));
+}
+
+#[test]
+fn doctor_report_display_with_failures() {
+    let report = propel_cloud::DoctorReport {
+        gcloud: propel_cloud::CheckResult::ok("1.0.0"),
+        account: propel_cloud::CheckResult::ok("user@example.com"),
+        project: propel_cloud::CheckResult::fail("Not set"),
+        billing: propel_cloud::CheckResult::fail("Unknown"),
+        apis: vec![],
+        config_file: propel_cloud::CheckResult::fail("Not found"),
+    };
+
+    let output = report.to_string();
+    assert!(output.contains("NG"));
+    assert!(output.contains("Not set"));
+    assert!(output.contains("Not found"));
+    assert!(output.contains("Some checks failed"));
+    assert!(!output.contains("All checks passed!"));
+}
+
+#[test]
+fn doctor_report_display_apis_shown() {
+    let report = propel_cloud::DoctorReport {
+        gcloud: propel_cloud::CheckResult::ok("1.0.0"),
+        account: propel_cloud::CheckResult::ok("user@example.com"),
+        project: propel_cloud::CheckResult::ok("proj"),
+        billing: propel_cloud::CheckResult::ok("Enabled"),
+        apis: vec![
+            propel_cloud::ApiCheck {
+                name: "run.googleapis.com".to_string(),
+                result: propel_cloud::CheckResult::ok("Enabled"),
+            },
+            propel_cloud::ApiCheck {
+                name: "cloudbuild.googleapis.com".to_string(),
+                result: propel_cloud::CheckResult::fail("Disabled"),
+            },
+        ],
+        config_file: propel_cloud::CheckResult::ok("Found"),
+    };
+
+    let output = report.to_string();
+    assert!(output.contains("run.googleapis.com API"));
+    assert!(output.contains("cloudbuild.googleapis.com API"));
+    assert!(output.contains("Disabled"));
 }
