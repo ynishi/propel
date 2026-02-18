@@ -1,6 +1,5 @@
 mod ci;
 mod deploy;
-pub(crate) mod deploy_pipeline;
 mod destroy;
 mod doctor;
 mod eject;
@@ -11,10 +10,20 @@ mod new;
 mod secret;
 mod status;
 
-use propel_core::PropelConfig;
+use propel_core::{ProjectMeta, PropelConfig};
 
 /// Artifact Registry repository name used for container images.
 pub(crate) const ARTIFACT_REPO_NAME: &str = "propel";
+
+/// Resolve the Cloud Run service name: config override or Cargo package name.
+pub(crate) fn service_name<'a>(config: &'a PropelConfig, meta: &'a ProjectMeta) -> &'a str {
+    config.project.name.as_deref().unwrap_or(&meta.name)
+}
+
+/// Build the Artifact Registry image path (without tag).
+pub(crate) fn image_path(region: &str, project_id: &str, repo: &str, service: &str) -> String {
+    format!("{region}-docker.pkg.dev/{project_id}/{repo}/{service}")
+}
 
 /// Initial `propel.toml` template with comprehensive documentation.
 ///

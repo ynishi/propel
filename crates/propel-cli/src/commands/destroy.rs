@@ -24,7 +24,7 @@ pub async fn destroy(
 
     let gcp_project_id = super::require_gcp_project_id(&config)?;
 
-    let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
+    let service_name = super::service_name(&config, &meta);
     let region = &config.project.region;
 
     // Discover secrets for display / deletion
@@ -71,13 +71,11 @@ pub async fn destroy(
         }
     }
 
-    let repo_name = super::ARTIFACT_REPO_NAME;
-    let image_tag = format!(
-        "{region}-docker.pkg.dev/{project}/{repo}/{service}",
-        region = region,
-        project = gcp_project_id,
-        repo = repo_name,
-        service = service_name,
+    let image_tag = super::image_path(
+        region,
+        gcp_project_id,
+        super::ARTIFACT_REPO_NAME,
+        service_name,
     );
 
     // 1. Delete Cloud Run service

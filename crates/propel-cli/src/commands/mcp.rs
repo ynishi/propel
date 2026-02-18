@@ -3,12 +3,12 @@
 //! MCP Protocol (stdio) <-> propel-cloud / propel-core / propel-build
 //!
 //! Each tool is a thin wrapper around existing CLI logic.
-//! Deploy pipeline and doctor formatting are shared with the CLI.
+//! DoctorReport formatting (`Display` impl) is shared with the CLI.
 
 use anyhow::Result;
 use clap::Args;
 use propel_build::dockerfile::DockerfileGenerator;
-use propel_build::eject as eject_mod;
+use propel_build::{bundle, eject as eject_mod};
 use propel_cloud::GcloudClient;
 use propel_core::{ProjectMeta, PropelConfig};
 use rmcp::{
@@ -25,6 +25,11 @@ use rmcp::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+/// Map any `Display` error to an MCP internal error.
+fn internal_err(e: impl std::fmt::Display) -> McpError {
+    McpError::internal_error(format!("{e}"), None)
+}
 
 // =============================================================================
 // CLI entry point
@@ -110,7 +115,50 @@ impl PropelMcpServer {
     }
 
     fn service_name<'a>(config: &'a PropelConfig, meta: &'a ProjectMeta) -> &'a str {
-        config.project.name.as_deref().unwrap_or(&meta.name)
+        super::service_name(config, meta)
+    }
+
+    /// Determine Dockerfile and bundle source into a temp directory.
+    fn prepare_bundle(
+        &self,
+        config: &PropelConfig,
+        meta: &ProjectMeta,
+        steps: &mut Vec<String>,
+    ) -> Result<PathBuf, McpError> {
+        let dockerfile_content = if eject_mod::is_ejected(&self.project_path) {
+            steps.push("Using ejected Dockerfile".to_string());
+            eject_mod::load_ejected_dockerfile(&self.project_path).map_err(internal_err)?
+        } else {
+            let generator = DockerfileGenerator::new(&config.build, meta, config.cloud_run.port);
+            generator.render()
+        };
+
+        let bundle_dir =
+            bundle::create_bundle(&self.project_path, &dockerfile_content).map_err(internal_err)?;
+        steps.push("Source bundled".to_string());
+        Ok(bundle_dir)
+    }
+
+    /// Discover secrets in Secret Manager (non-fatal on failure).
+    async fn discover_secrets(
+        project_id: &str,
+        client: &GcloudClient,
+        steps: &mut Vec<String>,
+    ) -> Vec<String> {
+        match client.list_secrets(project_id).await {
+            Ok(s) => {
+                if s.is_empty() {
+                    steps.push("No secrets found in Secret Manager".to_string());
+                } else {
+                    steps.push(format!("{} secret(s) will be injected", s.len()));
+                }
+                s
+            }
+            Err(e) => {
+                steps.push(format!("Warning: could not list secrets: {e}"));
+                vec![]
+            }
+        }
     }
 }
 
@@ -203,7 +251,6 @@ struct McpEjectRequest {}
 
 #[tool_router]
 impl PropelMcpServer {
-    /// Uses shared DoctorReport Display impl — no formatting duplication.
     #[tool(
         name = "doctor",
         description = "Check GCP setup and readiness for deployment. Verifies gcloud CLI, authentication, project, billing, required APIs, and propel.toml existence.",
@@ -217,6 +264,8 @@ impl PropelMcpServer {
         &self,
         #[allow(unused_variables)] Parameters(_req): Parameters<McpDoctorRequest>,
     ) -> Result<CallToolResult, McpError> {
+        // Intentionally loads config without `self.load_config()?`:
+        // doctor must report diagnostics even when propel.toml is missing or invalid.
         let config = PropelConfig::load(&self.project_path);
         let project_id = config
             .as_ref()
@@ -260,7 +309,7 @@ impl PropelMcpServer {
         let output = client
             .describe_service(service_name, project_id, &config.project.region)
             .await
-            .map_err(|e| McpError::internal_error(format!("Failed to get status: {e}"), None))?;
+            .map_err(internal_err)?;
 
         Ok(CallToolResult::success(vec![Content::text(output)]))
     }
@@ -287,19 +336,14 @@ impl PropelMcpServer {
 
         let client = GcloudClient::new();
         let output = client
-            .read_logs(
-                service_name,
-                project_id,
-                &config.project.region,
-                limit,
-                true,
-            )
+            .read_logs_captured(service_name, project_id, &config.project.region, limit)
             .await
-            .map_err(|e| McpError::internal_error(format!("Failed to read logs: {e}"), None))?;
+            .map_err(internal_err)?;
 
-        let text = match output {
-            Some(s) if !s.trim().is_empty() => s,
-            _ => "No log entries found".to_string(),
+        let text = if output.trim().is_empty() {
+            "No log entries found".to_string()
+        } else {
+            output
         };
 
         Ok(CallToolResult::success(vec![Content::text(text)]))
@@ -325,7 +369,7 @@ impl PropelMcpServer {
         let secrets = client
             .list_secrets(project_id)
             .await
-            .map_err(|e| McpError::internal_error(format!("Failed to list secrets: {e}"), None))?;
+            .map_err(internal_err)?;
 
         let output = if secrets.is_empty() {
             "No secrets found".to_string()
@@ -355,14 +399,11 @@ impl PropelMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let config = self.load_config()?;
 
-        let json = serde_json::to_string_pretty(&config).map_err(|e| {
-            McpError::internal_error(format!("Failed to serialize config: {e}"), None)
-        })?;
+        let json = serde_json::to_string_pretty(&config).map_err(internal_err)?;
 
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    /// Uses shared deploy pipeline — no logic duplication.
     #[tool(
         name = "deploy",
         description = "Full deploy pipeline: dirty check -> bundle source -> Cloud Build -> Cloud Run. Returns the deployed service URL on success. Long-running operation (~3-10 minutes).",
@@ -377,18 +418,91 @@ impl PropelMcpServer {
         &self,
         Parameters(req): Parameters<McpDeployRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let outcome = super::deploy_pipeline::run(&self.project_path, req.allow_dirty, true)
-            .await
-            .map_err(|e| McpError::internal_error(format!("{e}"), None))?;
+        let client = GcloudClient::new();
+        let mut steps = Vec::new();
 
-        let mut parts = vec![outcome.steps.join("\n")];
-        if let Some(build_log) = outcome.build_output {
-            parts.push(format!("\n--- Cloud Build Log ---\n{build_log}"));
+        // Dirty check
+        if !req.allow_dirty && bundle::is_dirty(&self.project_path).map_err(internal_err)? {
+            return Err(McpError::invalid_request(
+                "Uncommitted changes detected. \
+                 Commit your changes, or set allow_dirty=true to deploy anyway."
+                    .to_string(),
+                None,
+            ));
         }
 
-        Ok(CallToolResult::success(vec![Content::text(
-            parts.join("\n"),
-        )]))
+        // Load configuration
+        let config = self.load_config()?;
+        let meta = self.load_meta()?;
+        let gcp_project_id = Self::require_project_id(&config)?;
+        let service_name = Self::service_name(&config, &meta);
+        let region = &config.project.region;
+        let image_tag = format!(
+            "{}:latest",
+            super::image_path(
+                region,
+                gcp_project_id,
+                super::ARTIFACT_REPO_NAME,
+                service_name
+            ),
+        );
+
+        // Pre-flight checks
+        let report = client
+            .check_prerequisites(gcp_project_id)
+            .await
+            .map_err(internal_err)?;
+        if report.has_warnings() {
+            let disabled = report.disabled_apis.join(", ");
+            return Err(McpError::internal_error(
+                format!(
+                    "Required APIs not enabled: {disabled}. \
+                     Enable them with: gcloud services enable <api> --project {gcp_project_id}"
+                ),
+                None,
+            ));
+        }
+        steps.push("Pre-flight checks passed".to_string());
+
+        // Ensure Artifact Registry repository
+        client
+            .ensure_artifact_repo(gcp_project_id, region, super::ARTIFACT_REPO_NAME)
+            .await
+            .map_err(internal_err)?;
+        steps.push("Artifact Registry repository ensured".to_string());
+
+        // Bundle source
+        let bundle_dir = self.prepare_bundle(&config, &meta, &mut steps)?;
+
+        // Submit build (captured for MCP response)
+        let build_output = client
+            .submit_build_captured(&bundle_dir, gcp_project_id, &image_tag)
+            .await
+            .map_err(internal_err)?;
+        steps.push("Cloud Build completed".to_string());
+
+        // Discover secrets & deploy to Cloud Run
+        let secrets = Self::discover_secrets(gcp_project_id, &client, &mut steps).await;
+        let url = client
+            .deploy_to_cloud_run(
+                service_name,
+                &image_tag,
+                gcp_project_id,
+                region,
+                &config.cloud_run,
+                &secrets,
+            )
+            .await
+            .map_err(internal_err)?;
+        steps.push(format!("Deployed: {url}"));
+
+        // Format response
+        let mut text = steps.join("\n");
+        if !build_output.is_empty() {
+            text.push_str(&format!("\n\n--- Cloud Build Log ---\n{build_output}"));
+        }
+
+        Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
     #[tool(
@@ -411,8 +525,7 @@ impl PropelMcpServer {
         let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
         let dockerfile = generator.render();
 
-        eject_mod::eject(&self.project_path, &dockerfile)
-            .map_err(|e| McpError::internal_error(format!("Eject failed: {e}"), None))?;
+        eject_mod::eject(&self.project_path, &dockerfile).map_err(internal_err)?;
 
         Ok(CallToolResult::success(vec![Content::text(
             "Ejected build config to .propel/Dockerfile\n\

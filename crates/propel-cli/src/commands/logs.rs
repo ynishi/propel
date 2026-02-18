@@ -11,7 +11,7 @@ pub async fn logs(follow: bool, tail: Option<u32>) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("gcp_project_id not set in propel.toml"))?;
 
     let meta = propel_core::ProjectMeta::from_cargo_toml(&PathBuf::from("."))?;
-    let service_name = config.project.name.as_deref().unwrap_or(&meta.name);
+    let service_name = super::service_name(&config, &meta);
     let region = &config.project.region;
 
     let client = GcloudClient::new();
@@ -21,7 +21,7 @@ pub async fn logs(follow: bool, tail: Option<u32>) -> anyhow::Result<()> {
     } else {
         let limit = tail.unwrap_or(100);
         client
-            .read_logs(service_name, project_id, region, limit, false)
+            .read_logs(service_name, project_id, region, limit)
             .await?;
     }
 
