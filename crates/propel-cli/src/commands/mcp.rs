@@ -49,8 +49,16 @@ fn internal_err(e: impl std::fmt::Display) -> McpError {
     }
   }
 
-The project path is auto-detected via MCP roots protocol.
-Use -p only when the client does not support roots.
+PROJECT PATH RESOLUTION:
+  The project path is resolved once at first tool call and locked
+  for the session lifetime (deploy-safe: no mid-session drift).
+
+  Priority:
+    1. MCP roots protocol (auto-detected from client)
+    2. -p flag (explicit fallback)
+
+  To target a different project, start a new session in that directory
+  or use -p to override.
 
 TOOLS PROVIDED:
   doctor, status, logs, secret_list, config, deploy, eject
@@ -233,7 +241,10 @@ impl ServerHandler for PropelMcpServer {
             instructions: Some(
                 "Propel MCP server for deploying Rust apps to Cloud Run. \
                  Start with `doctor` to check GCP readiness, use `config` to see project settings, \
-                 `status` to check running service, and `deploy` to build & deploy."
+                 `status` to check running service, and `deploy` to build & deploy. \
+                 The project path is resolved once at first tool call via MCP roots protocol \
+                 and locked for the session (deploy-safe). To target a different project, \
+                 start a new session in that directory."
                     .to_string(),
             ),
         }
