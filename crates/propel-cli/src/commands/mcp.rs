@@ -24,7 +24,9 @@ use rmcp::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use tokio::sync::OnceCell;
 
 /// Map any `Display` error to an MCP internal error.
 fn internal_err(e: impl std::fmt::Display) -> McpError {
@@ -37,26 +39,30 @@ fn internal_err(e: impl std::fmt::Display) -> McpError {
 
 /// MCP subcommand arguments
 #[derive(Args)]
-#[command(after_long_help = r#"SETUP (Claude Code ~/.claude.json):
+#[command(after_long_help = r#"SETUP (Claude Code .mcp.json):
   {
     "mcpServers": {
       "propel": {
         "command": "propel",
-        "args": ["mcp", "-p", "/path/to/project"]
+        "args": ["mcp"]
       }
     }
   }
+
+The project path is auto-detected via MCP roots protocol.
+Use -p only when the client does not support roots.
 
 TOOLS PROVIDED:
   doctor, status, logs, secret_list, config, deploy, eject
 
 EXAMPLES:
-  $ propel mcp -p ./my-project
+  $ propel mcp                   # auto-detect from MCP roots
+  $ propel mcp -p ./my-project   # explicit fallback
 "#)]
 pub(crate) struct McpArgs {
-    /// Project path containing propel.toml
-    #[arg(short, long, default_value = ".")]
-    pub path: PathBuf,
+    /// Fallback project path (auto-detected from MCP roots when omitted)
+    #[arg(short, long)]
+    pub path: Option<PathBuf>,
 }
 
 /// Execute the MCP server
@@ -65,11 +71,14 @@ pub(crate) async fn execute(args: McpArgs) -> Result<()> {
 }
 
 async fn run_mcp_server(args: McpArgs) -> Result<()> {
-    let project_path = args.path.canonicalize().map_err(|e| {
-        anyhow::anyhow!("Project path '{}' not accessible: {e}", args.path.display())
-    })?;
+    let cli_path = match args.path {
+        Some(p) => Some(p.canonicalize().map_err(|e| {
+            anyhow::anyhow!("Project path '{}' not accessible: {e}", p.display())
+        })?),
+        None => None,
+    };
 
-    let server = PropelMcpServer::new(project_path);
+    let server = PropelMcpServer::new(cli_path);
     let service = server.serve(stdio()).await?;
     service.waiting().await?;
 
@@ -82,25 +91,64 @@ async fn run_mcp_server(args: McpArgs) -> Result<()> {
 
 #[derive(Clone)]
 struct PropelMcpServer {
-    project_path: PathBuf,
+    /// Fallback path from `-p` flag (used when roots protocol is unavailable).
+    cli_path: Option<PathBuf>,
+    /// Resolved project path (from roots protocol or cli_path).
+    resolved_path: Arc<OnceCell<PathBuf>>,
     tool_router: ToolRouter<Self>,
 }
 
 impl PropelMcpServer {
-    fn new(project_path: PathBuf) -> Self {
+    fn new(cli_path: Option<PathBuf>) -> Self {
         Self {
-            project_path,
+            cli_path,
+            resolved_path: Arc::new(OnceCell::new()),
             tool_router: Self::tool_router(),
         }
     }
 
-    fn load_config(&self) -> Result<PropelConfig, McpError> {
-        PropelConfig::load(&self.project_path)
+    /// Resolve project path: roots protocol first, then `-p` fallback.
+    async fn project_path(
+        &self,
+        peer: &rmcp::service::Peer<RoleServer>,
+    ) -> Result<PathBuf, McpError> {
+        let path = self
+            .resolved_path
+            .get_or_try_init(|| async {
+                // Try MCP roots protocol
+                if let Ok(result) = peer.list_roots().await
+                    && let Some(root) = result.roots.first()
+                    && let Some(path) = root.uri.strip_prefix("file://")
+                {
+                    let p = PathBuf::from(path);
+                    if p.exists() {
+                        return Ok(p);
+                    }
+                }
+
+                // Fallback to CLI -p flag
+                if let Some(ref p) = self.cli_path {
+                    return Ok(p.clone());
+                }
+
+                Err(McpError::internal_error(
+                    "Project path not available. \
+                     The MCP client did not provide roots, and no -p flag was given."
+                        .to_string(),
+                    None,
+                ))
+            })
+            .await?;
+        Ok(path.clone())
+    }
+
+    fn load_config(project_path: &Path) -> Result<PropelConfig, McpError> {
+        PropelConfig::load(project_path)
             .map_err(|e| McpError::internal_error(format!("Failed to load config: {e}"), None))
     }
 
-    fn load_meta(&self) -> Result<ProjectMeta, McpError> {
-        ProjectMeta::from_cargo_toml(&self.project_path).map_err(|e| {
+    fn load_meta(project_path: &Path) -> Result<ProjectMeta, McpError> {
+        ProjectMeta::from_cargo_toml(project_path).map_err(|e| {
             McpError::internal_error(format!("Failed to load project meta: {e}"), None)
         })
     }
@@ -120,21 +168,21 @@ impl PropelMcpServer {
 
     /// Determine Dockerfile and bundle source into a temp directory.
     fn prepare_bundle(
-        &self,
+        project_path: &Path,
         config: &PropelConfig,
         meta: &ProjectMeta,
         steps: &mut Vec<String>,
     ) -> Result<PathBuf, McpError> {
-        let dockerfile_content = if eject_mod::is_ejected(&self.project_path) {
+        let dockerfile_content = if eject_mod::is_ejected(project_path) {
             steps.push("Using ejected Dockerfile".to_string());
-            eject_mod::load_ejected_dockerfile(&self.project_path).map_err(internal_err)?
+            eject_mod::load_ejected_dockerfile(project_path).map_err(internal_err)?
         } else {
             let generator = DockerfileGenerator::new(&config.build, meta, config.cloud_run.port);
             generator.render()
         };
 
         let bundle_dir =
-            bundle::create_bundle(&self.project_path, &dockerfile_content).map_err(internal_err)?;
+            bundle::create_bundle(project_path, &dockerfile_content).map_err(internal_err)?;
         steps.push("Source bundled".to_string());
         Ok(bundle_dir)
     }
@@ -263,10 +311,13 @@ impl PropelMcpServer {
     async fn doctor(
         &self,
         #[allow(unused_variables)] Parameters(_req): Parameters<McpDoctorRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        // Intentionally loads config without `self.load_config()?`:
+        let project_path = self.project_path(&peer).await?;
+
+        // Intentionally loads config without `Self::load_config()?`:
         // doctor must report diagnostics even when propel.toml is missing or invalid.
-        let config = PropelConfig::load(&self.project_path);
+        let config = PropelConfig::load(&project_path);
         let project_id = config
             .as_ref()
             .ok()
@@ -276,7 +327,7 @@ impl PropelMcpServer {
         let mut report = client.doctor(project_id).await;
 
         // Config file check
-        if self.project_path.join("propel.toml").exists() {
+        if project_path.join("propel.toml").exists() {
             report.config_file = propel_cloud::CheckResult::ok("Found");
         } else {
             report.config_file = propel_cloud::CheckResult::fail("Not found");
@@ -299,9 +350,11 @@ impl PropelMcpServer {
     async fn status(
         &self,
         #[allow(unused_variables)] Parameters(_req): Parameters<McpStatusRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let config = self.load_config()?;
-        let meta = self.load_meta()?;
+        let project_path = self.project_path(&peer).await?;
+        let config = Self::load_config(&project_path)?;
+        let meta = Self::load_meta(&project_path)?;
         let project_id = Self::require_project_id(&config)?;
         let service_name = Self::service_name(&config, &meta);
 
@@ -326,9 +379,11 @@ impl PropelMcpServer {
     async fn logs(
         &self,
         Parameters(req): Parameters<McpLogsRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let config = self.load_config()?;
-        let meta = self.load_meta()?;
+        let project_path = self.project_path(&peer).await?;
+        let config = Self::load_config(&project_path)?;
+        let meta = Self::load_meta(&project_path)?;
         let project_id = Self::require_project_id(&config)?;
         let service_name = Self::service_name(&config, &meta);
 
@@ -361,8 +416,10 @@ impl PropelMcpServer {
     async fn secret_list(
         &self,
         #[allow(unused_variables)] Parameters(_req): Parameters<McpSecretListRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let config = self.load_config()?;
+        let project_path = self.project_path(&peer).await?;
+        let config = Self::load_config(&project_path)?;
         let project_id = Self::require_project_id(&config)?;
 
         let client = GcloudClient::new();
@@ -396,8 +453,10 @@ impl PropelMcpServer {
     async fn config(
         &self,
         #[allow(unused_variables)] Parameters(_req): Parameters<McpConfigRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let config = self.load_config()?;
+        let project_path = self.project_path(&peer).await?;
+        let config = Self::load_config(&project_path)?;
 
         let json = serde_json::to_string_pretty(&config).map_err(internal_err)?;
 
@@ -417,12 +476,14 @@ impl PropelMcpServer {
     async fn deploy(
         &self,
         Parameters(req): Parameters<McpDeployRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
+        let project_path = self.project_path(&peer).await?;
         let client = GcloudClient::new();
         let mut steps = Vec::new();
 
         // Dirty check
-        if !req.allow_dirty && bundle::is_dirty(&self.project_path).map_err(internal_err)? {
+        if !req.allow_dirty && bundle::is_dirty(&project_path).map_err(internal_err)? {
             return Err(McpError::invalid_request(
                 "Uncommitted changes detected. \
                  Commit your changes, or set allow_dirty=true to deploy anyway."
@@ -432,8 +493,8 @@ impl PropelMcpServer {
         }
 
         // Load configuration
-        let config = self.load_config()?;
-        let meta = self.load_meta()?;
+        let config = Self::load_config(&project_path)?;
+        let meta = Self::load_meta(&project_path)?;
         let gcp_project_id = Self::require_project_id(&config)?;
         let service_name = Self::service_name(&config, &meta);
         let region = &config.project.region;
@@ -472,7 +533,7 @@ impl PropelMcpServer {
         steps.push("Artifact Registry repository ensured".to_string());
 
         // Bundle source
-        let bundle_dir = self.prepare_bundle(&config, &meta, &mut steps)?;
+        let bundle_dir = Self::prepare_bundle(&project_path, &config, &meta, &mut steps)?;
 
         // Submit build (captured for MCP response)
         let build_output = client
@@ -518,14 +579,16 @@ impl PropelMcpServer {
     async fn eject(
         &self,
         #[allow(unused_variables)] Parameters(_req): Parameters<McpEjectRequest>,
+        peer: rmcp::service::Peer<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
-        let config = self.load_config()?;
-        let meta = self.load_meta()?;
+        let project_path = self.project_path(&peer).await?;
+        let config = Self::load_config(&project_path)?;
+        let meta = Self::load_meta(&project_path)?;
 
         let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
         let dockerfile = generator.render();
 
-        eject_mod::eject(&self.project_path, &dockerfile).map_err(internal_err)?;
+        eject_mod::eject(&project_path, &dockerfile).map_err(internal_err)?;
 
         Ok(CallToolResult::success(vec![Content::text(
             "Ejected build config to .propel/Dockerfile\n\
@@ -568,7 +631,7 @@ mod tests {
 
     #[test]
     fn server_info_version() {
-        let server = PropelMcpServer::new(PathBuf::from("."));
+        let server = PropelMcpServer::new(Some(PathBuf::from(".")));
         let info = server.get_info();
         assert_eq!(info.server_info.name, "propel");
         assert!(!info.server_info.version.is_empty());
