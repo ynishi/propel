@@ -75,13 +75,7 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
     // Discover secrets in Secret Manager and inject into Cloud Run.
     // IAM binding (secretAccessor) is granted at `propel secret set` time,
     // so deploy only needs secretmanager.viewer to list.
-    let secrets = match client.list_secrets(gcp_project_id).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("Warning: could not list secrets: {e}");
-            vec![]
-        }
-    };
+    let secrets = client.list_secrets(gcp_project_id).await?;
     if secrets.is_empty() {
         println!("No secrets found in Secret Manager");
     } else {

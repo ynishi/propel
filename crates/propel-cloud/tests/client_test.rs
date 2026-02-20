@@ -189,6 +189,45 @@ async fn preflight_disabled_apis_reported() {
     );
 }
 
+#[tokio::test]
+async fn preflight_api_check_gcloud_failure_propagates_error() {
+    let mut mock = MockExecutor::new();
+
+    // version, auth, project all OK
+    mock.expect_exec()
+        .withf(|args| args.contains(&"version".to_owned()))
+        .returning(|_| Ok("495.0.0\n".to_owned()));
+
+    mock.expect_exec()
+        .withf(|args| args.contains(&"print-access-token".to_owned()))
+        .returning(|_| Ok("ya29.token\n".to_owned()));
+
+    mock.expect_exec()
+        .withf(|args| {
+            args.contains(&"describe".to_owned()) && args.contains(&"projects".to_owned())
+        })
+        .returning(|_| Ok("my-project\n".to_owned()));
+
+    // API check: gcloud command itself fails (network error, auth expired, etc.)
+    mock.expect_exec()
+        .withf(|args| args.contains(&"services".to_owned()) && args.contains(&"list".to_owned()))
+        .returning(|_| {
+            Err(GcloudError::CommandFailed {
+                args: vec![],
+                stderr: "ERROR: network timeout".to_owned(),
+            })
+        });
+
+    let client = GcloudClient::with_executor(mock);
+    let result = client.check_prerequisites("test-project").await;
+
+    // Must be ApiCheckFailed, NOT a successful report with disabled_apis
+    assert!(
+        matches!(result, Err(PreflightError::ApiCheckFailed { ref api, .. }) if api == "cloudbuild.googleapis.com"),
+        "expected ApiCheckFailed, got: {result:?}"
+    );
+}
+
 // ── Cloud Build Tests ──
 
 #[tokio::test]

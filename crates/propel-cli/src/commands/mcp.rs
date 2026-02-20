@@ -196,26 +196,26 @@ impl PropelMcpServer {
         Ok(bundle_dir)
     }
 
-    /// Discover secrets in Secret Manager (non-fatal on failure).
+    /// Discover secrets in Secret Manager.
+    ///
+    /// Failure to list secrets is a hard error — deploying without expected
+    /// secrets would cause the application to crash on startup.
     async fn discover_secrets(
         project_id: &str,
         client: &GcloudClient,
         steps: &mut Vec<String>,
-    ) -> Vec<String> {
-        match client.list_secrets(project_id).await {
-            Ok(s) => {
-                if s.is_empty() {
-                    steps.push("No secrets found in Secret Manager".to_string());
-                } else {
-                    steps.push(format!("{} secret(s) will be injected", s.len()));
-                }
-                s
-            }
-            Err(e) => {
-                steps.push(format!("Warning: could not list secrets: {e}"));
-                vec![]
-            }
+    ) -> Result<Vec<String>, McpError> {
+        let secrets = client
+            .list_secrets(project_id)
+            .await
+            .map_err(internal_err)?;
+
+        if secrets.is_empty() {
+            steps.push("No secrets found in Secret Manager".to_string());
+        } else {
+            steps.push(format!("{} secret(s) will be injected", secrets.len()));
         }
+        Ok(secrets)
     }
 }
 
@@ -555,7 +555,7 @@ impl PropelMcpServer {
         steps.push("Cloud Build completed".to_string());
 
         // Discover secrets & deploy to Cloud Run
-        let secrets = Self::discover_secrets(gcp_project_id, &client, &mut steps).await;
+        let secrets = Self::discover_secrets(gcp_project_id, &client, &mut steps).await?;
         let url = client
             .deploy_to_cloud_run(
                 service_name,
