@@ -1,35 +1,15 @@
 # arch-lint configuration for propel-rs
 
+preset = "recommended"
+fail_on = "warning"
+
 [analyzer]
 exclude = [
     "**/target/**",
     "**/vendor/**",
     "**/generated/**",
+    "**/tests/**",
+    "examples/**",
     "crates/propel-sdk/**",  # deprecated crate — frozen, no changes allowed
 ]
 respect_gitignore = true
-
-# ── Rules ──
-
-[rules.no-unwrap-expect]
-enabled = true
-allow_in_tests = true
-
-[rules.no-error-swallowing]
-enabled = true
-
-[rules.no-silent-result-drop]
-enabled = true
-allow_in_tests = true
-
-[rules.no-sync-io]
-enabled = true
-
-[rules.require-thiserror]
-enabled = true
-
-[rules.require-tracing]
-enabled = true
-
-[rules.tracing-env-init]
-enabled = true

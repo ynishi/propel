@@ -35,3 +35,4 @@ assert_cmd = { workspace = true }
 predicates = { workspace = true }
 tempfile = { workspace = true }
 proptest = { workspace = true }
+arch-lint = { workspace = true }

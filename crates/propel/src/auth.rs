@@ -82,6 +82,7 @@ impl PropelAuth {
         if let Some(key) = request
             .headers()
             .get("x-server-key")
+            // arch-lint: allow(no-silent-result-drop) reason="non-ASCII HeaderValue is invalid for server key; treating as absent"
             .and_then(|v| v.to_str().ok())
         {
             let expected = state.server_key.as_ref().ok_or_else(|| {
@@ -106,6 +107,7 @@ impl PropelAuth {
         let auth_header = request
             .headers()
             .get("authorization")
+            // arch-lint: allow(no-silent-result-drop) reason="non-ASCII Authorization header is malformed; treating as absent triggers 401"
             .and_then(|v| v.to_str().ok())
             .ok_or_else(|| {
                 tracing::warn!(path = %request.uri(), "missing authentication");

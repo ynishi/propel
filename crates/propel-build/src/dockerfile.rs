@@ -114,8 +114,10 @@ CMD ["app"]
                 for path in paths {
                     if path.ends_with('/') {
                         let trimmed = path.trim_end_matches('/');
+                        // arch-lint: allow(no-silent-result-drop) reason="fmt::Write for String is infallible"
                         let _ = writeln!(out, "COPY {trimmed}/ ./{trimmed}/");
                     } else {
+                        // arch-lint: allow(no-silent-result-drop) reason="fmt::Write for String is infallible"
                         let _ = writeln!(out, "COPY {path} ./{path}");
                     }
                 }
@@ -136,6 +138,7 @@ CMD ["app"]
         let mut out = String::new();
         for key in keys {
             let value = &self.config.env[key];
+            // arch-lint: allow(no-silent-result-drop) reason="fmt::Write for String is infallible"
             let _ = writeln!(out, "ENV {key}={value}");
         }
         out

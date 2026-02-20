@@ -47,6 +47,7 @@ pub async fn secret_delete(key: &str, skip_confirm: bool) -> anyhow::Result<()> 
     // Revoke Cloud Run SA's access before deleting the secret itself.
     let project_number = client.get_project_number(project_id).await?;
     let sa = format!("{project_number}-compute@developer.gserviceaccount.com");
+    // arch-lint: allow(no-error-swallowing) reason="revoke is best-effort pre-cleanup; propagating would skip delete_secret, leaving both secret and binding"
     if let Err(e) = client.revoke_secret_access(project_id, key, &sa).await {
         eprintln!("Warning: could not revoke SA binding for '{key}': {e}");
     }
