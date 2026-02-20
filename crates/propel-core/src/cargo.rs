@@ -84,10 +84,10 @@ impl CargoProject {
     ///
     /// # Errors
     ///
-    /// - [`Error::CargoMetadata`] if `cargo metadata` fails (e.g. cargo not installed)
-    /// - [`Error::NoPackageInDir`] if `project_dir` is a workspace root without `[package]`
-    /// - [`Error::NoBinaryTarget`] if the package has no binary targets
-    /// - [`Error::MultipleBinaries`] if multiple binaries exist and none is selected
+    /// - [`crate::Error::CargoMetadata`] if `cargo metadata` fails (e.g. cargo not installed)
+    /// - [`crate::Error::NoPackageInDir`] if `project_dir` is a workspace root without `[package]`
+    /// - [`crate::Error::NoBinaryTarget`] if the package has no binary targets
+    /// - [`crate::Error::MultipleBinaries`] if multiple binaries exist and none is selected
     pub fn discover(project_dir: &Path) -> crate::Result<Self> {
         let manifest_path = project_dir.join("Cargo.toml");
         tracing::debug!(path = %manifest_path.display(), "running cargo metadata");
