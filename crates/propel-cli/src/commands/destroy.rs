@@ -28,6 +28,7 @@ pub async fn destroy(
     let region = &config.project.region;
 
     // Discover secrets for display / deletion
+    // arch-lint: allow(no-error-swallowing) reason="pre-destroy discovery; empty fallback is safe since delete loop simply skips"
     let secrets = match client.list_secrets(gcp_project_id).await {
         Ok(s) => s,
         Err(e) => {

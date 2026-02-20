@@ -20,7 +20,7 @@ pub async fn logs(follow: bool, tail: Option<u32>) -> anyhow::Result<()> {
     if follow {
         client.tail_logs(service_name, project_id, region).await?;
     } else {
-        // AL013-allow: None = user omitted --tail flag; 100 is the CLI default
+        // arch-lint: allow(no-silent-result-drop) reason="Option: None = user omitted --tail flag; 100 is CLI default"
         let limit = tail.unwrap_or(100);
         client
             .read_logs(service_name, project_id, region, limit)

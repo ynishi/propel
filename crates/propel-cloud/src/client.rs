@@ -115,8 +115,7 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         match self.executor.exec(&args(["version"])).await {
             Ok(v) => {
                 // Parse "Google Cloud SDK X.Y.Z" from first line
-                // AL013-allow: doctor() is diagnostic — raw output fallback is more informative
-                // than failing when gcloud changes its output format
+                // arch-lint: allow(no-silent-result-drop) reason="Option: doctor() is diagnostic — raw output fallback is more informative than failing on format change"
                 let version = v
                     .lines()
                     .next()

@@ -193,7 +193,7 @@ async fn detect_github_repo() -> anyhow::Result<String> {
 fn parse_github_repo(url: &str) -> Option<String> {
     // SSH: git@github.com:owner/repo.git
     if let Some(rest) = url.strip_prefix("git@github.com:") {
-        // AL013-allow: ".git" suffix is optional in GitHub SSH URLs (e.g. git@github.com:owner/repo)
+        // arch-lint: allow(no-silent-result-drop) reason="Option: .git suffix is optional in GitHub SSH URLs"
         let repo = rest.strip_suffix(".git").unwrap_or(rest);
         return Some(repo.to_owned());
     }
@@ -203,9 +203,9 @@ fn parse_github_repo(url: &str) -> Option<String> {
         .strip_prefix("https://github.com/")
         .or_else(|| url.strip_prefix("http://github.com/"))
     {
-        // AL013-allow: ".git" suffix is optional in GitHub HTTPS URLs
+        // arch-lint: allow(no-silent-result-drop) reason="Option: .git suffix is optional in GitHub HTTPS URLs"
         let repo = rest.strip_suffix(".git").unwrap_or(rest);
-        // AL013-allow: trailing slash is optional URL normalization
+        // arch-lint: allow(no-silent-result-drop) reason="Option: trailing slash is optional URL normalization"
         let repo = repo.strip_suffix('/').unwrap_or(repo);
         return Some(repo.to_owned());
     }
