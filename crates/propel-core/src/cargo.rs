@@ -161,8 +161,8 @@ impl CargoProject {
         let pkg_manifest = PathBuf::from(package.manifest_path.as_std_path());
         let pkg_dir = pkg_manifest
             .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| pkg_manifest.clone());
+            .expect("manifest_path from cargo metadata is always absolute")
+            .to_path_buf();
 
         tracing::debug!(
             name = %package.name,
