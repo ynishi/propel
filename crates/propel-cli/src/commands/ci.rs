@@ -50,11 +50,10 @@ pub async fn ci_init() -> anyhow::Result<()> {
     let gh_version = exec_gh(&["--version"])
         .await
         .map_err(|_| anyhow::anyhow!("gh CLI not found. Install: https://cli.github.com"))?;
-    // lines().next() returns None only when output is completely empty
     let gh_ver_line = gh_version
         .lines()
         .next()
-        .unwrap_or("unknown version")
+        .ok_or_else(|| anyhow::anyhow!("gh --version returned empty output"))?
         .trim();
     println!("  gh CLI: {gh_ver_line}");
 
@@ -194,6 +193,7 @@ async fn detect_github_repo() -> anyhow::Result<String> {
 fn parse_github_repo(url: &str) -> Option<String> {
     // SSH: git@github.com:owner/repo.git
     if let Some(rest) = url.strip_prefix("git@github.com:") {
+        // AL013-allow: ".git" suffix is optional in GitHub SSH URLs (e.g. git@github.com:owner/repo)
         let repo = rest.strip_suffix(".git").unwrap_or(rest);
         return Some(repo.to_owned());
     }
@@ -203,8 +203,9 @@ fn parse_github_repo(url: &str) -> Option<String> {
         .strip_prefix("https://github.com/")
         .or_else(|| url.strip_prefix("http://github.com/"))
     {
+        // AL013-allow: ".git" suffix is optional in GitHub HTTPS URLs
         let repo = rest.strip_suffix(".git").unwrap_or(rest);
-        // Strip trailing slash if present
+        // AL013-allow: trailing slash is optional URL normalization
         let repo = repo.strip_suffix('/').unwrap_or(repo);
         return Some(repo.to_owned());
     }

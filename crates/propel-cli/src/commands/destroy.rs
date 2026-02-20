@@ -78,6 +78,8 @@ pub async fn destroy(
         service_name,
     );
 
+    let mut cleanup_errors: Vec<String> = Vec::new();
+
     // 1. Delete Cloud Run service
     println!("Deleting Cloud Run service '{service_name}'...");
     match client
@@ -85,14 +87,20 @@ pub async fn destroy(
         .await
     {
         Ok(()) => println!("  Deleted."),
-        Err(e) => println!("  Skipped ({})", e),
+        Err(e) => {
+            println!("  Skipped ({e})");
+            cleanup_errors.push(format!("Cloud Run service: {e}"));
+        }
     }
 
     // 2. Delete container image from Artifact Registry
     println!("Deleting container image...");
     match client.delete_image(&image_tag, gcp_project_id).await {
         Ok(()) => println!("  Deleted."),
-        Err(e) => println!("  Skipped ({})", e),
+        Err(e) => {
+            println!("  Skipped ({e})");
+            cleanup_errors.push(format!("container image: {e}"));
+        }
     }
 
     // 3. Delete secrets if requested
@@ -101,7 +109,10 @@ pub async fn destroy(
         for s in &secrets {
             match client.delete_secret(gcp_project_id, s).await {
                 Ok(()) => println!("  Deleted {}", mask_name(s)),
-                Err(e) => println!("  Skipped {} ({})", mask_name(s), e),
+                Err(e) => {
+                    println!("  Skipped {} ({e})", mask_name(s));
+                    cleanup_errors.push(format!("secret {}: {e}", mask_name(s)));
+                }
             }
         }
     }
@@ -116,7 +127,10 @@ pub async fn destroy(
             .await
         {
             Ok(()) => println!("  Deleted WIF Pool '{}'", ci::WIF_POOL_ID),
-            Err(e) => println!("  Skipped WIF Pool ({})", e),
+            Err(e) => {
+                println!("  Skipped WIF Pool ({e})");
+                cleanup_errors.push(format!("WIF Pool: {e}"));
+            }
         }
 
         // Service Account
@@ -126,14 +140,20 @@ pub async fn destroy(
             .await
         {
             Ok(()) => println!("  Deleted Service Account"),
-            Err(e) => println!("  Skipped Service Account ({})", e),
+            Err(e) => {
+                println!("  Skipped Service Account ({e})");
+                cleanup_errors.push(format!("Service Account: {e}"));
+            }
         }
 
         // GitHub Secrets (best-effort)
         for secret_name in ci::GH_SECRET_NAMES {
             match ci::delete_gh_secret(secret_name).await {
                 Ok(()) => println!("  Deleted GitHub Secret: {secret_name}"),
-                Err(e) => println!("  Skipped GitHub Secret {secret_name} ({e})"),
+                Err(e) => {
+                    println!("  Skipped GitHub Secret {secret_name} ({e})");
+                    cleanup_errors.push(format!("GitHub Secret {secret_name}: {e}"));
+                }
             }
         }
 
@@ -150,6 +170,14 @@ pub async fn destroy(
     if bundle_dir.exists() {
         std::fs::remove_dir_all(&bundle_dir)?;
         println!("Removed local .propel-bundle/");
+    }
+
+    if !cleanup_errors.is_empty() {
+        eprintln!();
+        eprintln!("{} cleanup step(s) failed:", cleanup_errors.len());
+        for e in &cleanup_errors {
+            eprintln!("  - {e}");
+        }
     }
 
     println!();

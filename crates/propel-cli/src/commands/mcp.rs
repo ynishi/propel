@@ -399,6 +399,7 @@ impl PropelMcpServer {
         let project_id = Self::require_project_id(&config)?;
         let service_name = Self::service_name(&config, &project);
 
+        // AL013-allow: None = MCP client omitted tail param; 100 is the default limit
         let limit = req.tail.unwrap_or(100).min(1000);
 
         let client = GcloudClient::new();
