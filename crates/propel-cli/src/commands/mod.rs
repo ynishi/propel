@@ -10,14 +10,14 @@ mod new;
 mod secret;
 mod status;
 
-use propel_core::{ProjectMeta, PropelConfig};
+use propel_core::{CargoProject, PropelConfig};
 
 /// Artifact Registry repository name used for container images.
 pub(crate) const ARTIFACT_REPO_NAME: &str = "propel";
 
 /// Resolve the Cloud Run service name: config override or Cargo package name.
-pub(crate) fn service_name<'a>(config: &'a PropelConfig, meta: &'a ProjectMeta) -> &'a str {
-    config.project.name.as_deref().unwrap_or(&meta.name)
+pub(crate) fn service_name<'a>(config: &'a PropelConfig, project: &'a CargoProject) -> &'a str {
+    config.project.name.as_deref().unwrap_or(&project.name)
 }
 
 /// Build the Artifact Registry image path (without tag).

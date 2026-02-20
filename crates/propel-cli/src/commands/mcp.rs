@@ -10,7 +10,7 @@ use clap::Args;
 use propel_build::dockerfile::DockerfileGenerator;
 use propel_build::{bundle, eject as eject_mod};
 use propel_cloud::GcloudClient;
-use propel_core::{ProjectMeta, PropelConfig};
+use propel_core::{CargoProject, PropelConfig};
 use rmcp::{
     ErrorData as McpError, ServerHandler, ServiceExt,
     handler::server::{tool::ToolCallContext, tool::ToolRouter, wrapper::Parameters},
@@ -79,12 +79,13 @@ pub(crate) async fn execute(args: McpArgs) -> Result<()> {
 }
 
 async fn run_mcp_server(args: McpArgs) -> Result<()> {
-    let cli_path = match args.path {
-        Some(p) => Some(p.canonicalize().map_err(|e| {
-            anyhow::anyhow!("Project path '{}' not accessible: {e}", p.display())
-        })?),
-        None => None,
-    };
+    let cli_path =
+        match args.path {
+            Some(p) => Some(p.canonicalize().map_err(|e| {
+                anyhow::anyhow!("Project path '{}' not accessible: {e}", p.display())
+            })?),
+            None => None,
+        };
 
     let server = PropelMcpServer::new(cli_path);
     let service = server.serve(stdio()).await?;
@@ -155,9 +156,9 @@ impl PropelMcpServer {
             .map_err(|e| McpError::internal_error(format!("Failed to load config: {e}"), None))
     }
 
-    fn load_meta(project_path: &Path) -> Result<ProjectMeta, McpError> {
-        ProjectMeta::from_cargo_toml(project_path).map_err(|e| {
-            McpError::internal_error(format!("Failed to load project meta: {e}"), None)
+    fn load_project(project_path: &Path) -> Result<CargoProject, McpError> {
+        CargoProject::discover(project_path).map_err(|e| {
+            McpError::internal_error(format!("Failed to discover cargo project: {e}"), None)
         })
     }
 
@@ -170,22 +171,22 @@ impl PropelMcpServer {
         })
     }
 
-    fn service_name<'a>(config: &'a PropelConfig, meta: &'a ProjectMeta) -> &'a str {
-        super::service_name(config, meta)
+    fn service_name<'a>(config: &'a PropelConfig, project: &'a CargoProject) -> &'a str {
+        super::service_name(config, project)
     }
 
     /// Determine Dockerfile and bundle source into a temp directory.
     fn prepare_bundle(
         project_path: &Path,
         config: &PropelConfig,
-        meta: &ProjectMeta,
+        project: &CargoProject,
         steps: &mut Vec<String>,
     ) -> Result<PathBuf, McpError> {
         let dockerfile_content = if eject_mod::is_ejected(project_path) {
             steps.push("Using ejected Dockerfile".to_string());
             eject_mod::load_ejected_dockerfile(project_path).map_err(internal_err)?
         } else {
-            let generator = DockerfileGenerator::new(&config.build, meta, config.cloud_run.port);
+            let generator = DockerfileGenerator::new(&config.build, project, config.cloud_run.port);
             generator.render()
         };
 
@@ -195,26 +196,26 @@ impl PropelMcpServer {
         Ok(bundle_dir)
     }
 
-    /// Discover secrets in Secret Manager (non-fatal on failure).
+    /// Discover secrets in Secret Manager.
+    ///
+    /// Failure to list secrets is a hard error — deploying without expected
+    /// secrets would cause the application to crash on startup.
     async fn discover_secrets(
         project_id: &str,
         client: &GcloudClient,
         steps: &mut Vec<String>,
-    ) -> Vec<String> {
-        match client.list_secrets(project_id).await {
-            Ok(s) => {
-                if s.is_empty() {
-                    steps.push("No secrets found in Secret Manager".to_string());
-                } else {
-                    steps.push(format!("{} secret(s) will be injected", s.len()));
-                }
-                s
-            }
-            Err(e) => {
-                steps.push(format!("Warning: could not list secrets: {e}"));
-                vec![]
-            }
+    ) -> Result<Vec<String>, McpError> {
+        let secrets = client
+            .list_secrets(project_id)
+            .await
+            .map_err(internal_err)?;
+
+        if secrets.is_empty() {
+            steps.push("No secrets found in Secret Manager".to_string());
+        } else {
+            steps.push(format!("{} secret(s) will be injected", secrets.len()));
         }
+        Ok(secrets)
     }
 }
 
@@ -365,9 +366,9 @@ impl PropelMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let project_path = self.project_path(&peer).await?;
         let config = Self::load_config(&project_path)?;
-        let meta = Self::load_meta(&project_path)?;
+        let project = Self::load_project(&project_path)?;
         let project_id = Self::require_project_id(&config)?;
-        let service_name = Self::service_name(&config, &meta);
+        let service_name = Self::service_name(&config, &project);
 
         let client = GcloudClient::new();
         let output = client
@@ -394,9 +395,9 @@ impl PropelMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let project_path = self.project_path(&peer).await?;
         let config = Self::load_config(&project_path)?;
-        let meta = Self::load_meta(&project_path)?;
+        let project = Self::load_project(&project_path)?;
         let project_id = Self::require_project_id(&config)?;
-        let service_name = Self::service_name(&config, &meta);
+        let service_name = Self::service_name(&config, &project);
 
         let limit = req.tail.unwrap_or(100).min(1000);
 
@@ -505,9 +506,9 @@ impl PropelMcpServer {
 
         // Load configuration
         let config = Self::load_config(&project_path)?;
-        let meta = Self::load_meta(&project_path)?;
+        let project = Self::load_project(&project_path)?;
         let gcp_project_id = Self::require_project_id(&config)?;
-        let service_name = Self::service_name(&config, &meta);
+        let service_name = Self::service_name(&config, &project);
         let region = &config.project.region;
         let image_tag = format!(
             "{}:latest",
@@ -544,7 +545,7 @@ impl PropelMcpServer {
         steps.push("Artifact Registry repository ensured".to_string());
 
         // Bundle source
-        let bundle_dir = Self::prepare_bundle(&project_path, &config, &meta, &mut steps)?;
+        let bundle_dir = Self::prepare_bundle(&project_path, &config, &project, &mut steps)?;
 
         // Submit build (captured for MCP response)
         let build_output = client
@@ -554,7 +555,7 @@ impl PropelMcpServer {
         steps.push("Cloud Build completed".to_string());
 
         // Discover secrets & deploy to Cloud Run
-        let secrets = Self::discover_secrets(gcp_project_id, &client, &mut steps).await;
+        let secrets = Self::discover_secrets(gcp_project_id, &client, &mut steps).await?;
         let url = client
             .deploy_to_cloud_run(
                 service_name,
@@ -594,9 +595,9 @@ impl PropelMcpServer {
     ) -> Result<CallToolResult, McpError> {
         let project_path = self.project_path(&peer).await?;
         let config = Self::load_config(&project_path)?;
-        let meta = Self::load_meta(&project_path)?;
+        let project = Self::load_project(&project_path)?;
 
-        let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
+        let generator = DockerfileGenerator::new(&config.build, &project, config.cloud_run.port);
         let dockerfile = generator.render();
 
         eject_mod::eject(&project_path, &dockerfile).map_err(internal_err)?;
@@ -615,6 +616,7 @@ impl PropelMcpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use propel_core::CargoBinary;
 
     #[test]
     fn logs_request_default_tail() {
@@ -652,23 +654,43 @@ mod tests {
     fn service_name_uses_config_override() {
         let mut config = PropelConfig::default();
         config.project.name = Some("custom-name".to_string());
-        let meta = ProjectMeta {
+        let project = CargoProject {
             name: "cargo-name".to_string(),
             version: "0.1.0".to_string(),
-            binary_name: "cargo-name".to_string(),
+            manifest_path: PathBuf::from("Cargo.toml"),
+            package_dir: PathBuf::from("."),
+            workspace_root: PathBuf::from("."),
+            binaries: vec![CargoBinary {
+                name: "cargo-name".to_string(),
+                src_path: PathBuf::from("src/main.rs"),
+            }],
+            default_binary: "cargo-name".to_string(),
         };
-        assert_eq!(PropelMcpServer::service_name(&config, &meta), "custom-name");
+        assert_eq!(
+            PropelMcpServer::service_name(&config, &project),
+            "custom-name"
+        );
     }
 
     #[test]
     fn service_name_falls_back_to_cargo() {
         let config = PropelConfig::default();
-        let meta = ProjectMeta {
+        let project = CargoProject {
             name: "cargo-name".to_string(),
             version: "0.1.0".to_string(),
-            binary_name: "cargo-name".to_string(),
+            manifest_path: PathBuf::from("Cargo.toml"),
+            package_dir: PathBuf::from("."),
+            workspace_root: PathBuf::from("."),
+            binaries: vec![CargoBinary {
+                name: "cargo-name".to_string(),
+                src_path: PathBuf::from("src/main.rs"),
+            }],
+            default_binary: "cargo-name".to_string(),
         };
-        assert_eq!(PropelMcpServer::service_name(&config, &meta), "cargo-name");
+        assert_eq!(
+            PropelMcpServer::service_name(&config, &project),
+            "cargo-name"
+        );
     }
 
     #[test]

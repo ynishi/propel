@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use propel_core::{BuildConfig, ProjectMeta};
+use propel_core::{BuildConfig, CargoProject};
 
 /// Generates an optimized multi-stage Dockerfile using Cargo Chef.
 ///
@@ -24,20 +24,24 @@ use propel_core::{BuildConfig, ProjectMeta};
 /// [`BuildConfig::env`] entries become `ENV` directives in the runtime stage.
 pub struct DockerfileGenerator<'a> {
     config: &'a BuildConfig,
-    meta: &'a ProjectMeta,
+    project: &'a CargoProject,
     port: u16,
 }
 
 impl<'a> DockerfileGenerator<'a> {
-    pub fn new(config: &'a BuildConfig, meta: &'a ProjectMeta, port: u16) -> Self {
-        Self { config, meta, port }
+    pub fn new(config: &'a BuildConfig, project: &'a CargoProject, port: u16) -> Self {
+        Self {
+            config,
+            project,
+            port,
+        }
     }
 
     pub fn render(&self) -> String {
         tracing::debug!(
             base = %self.config.base_image,
             runtime = %self.config.runtime_image,
-            binary = %self.meta.binary_name,
+            binary = %self.project.default_binary,
             port = self.port,
             "generating Dockerfile"
         );
@@ -86,7 +90,7 @@ CMD ["app"]
             base = self.config.base_image,
             chef_version = self.config.cargo_chef_version,
             runtime = self.config.runtime_image,
-            binary = self.meta.binary_name,
+            binary = self.project.default_binary,
             extra_packages = extra_packages,
             runtime_copies = runtime_copies,
             env_directives = env_directives,

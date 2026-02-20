@@ -78,7 +78,7 @@ impl<E: GcloudExecutor> GcloudClient<E> {
             "run.googleapis.com",
             "secretmanager.googleapis.com",
         ] {
-            let enabled = self
+            let output = self
                 .executor
                 .exec(&args([
                     "services",
@@ -91,10 +91,12 @@ impl<E: GcloudExecutor> GcloudClient<E> {
                     "value(config.name)",
                 ]))
                 .await
-                .map(|out| !out.trim().is_empty())
-                .unwrap_or(false);
+                .map_err(|e| PreflightError::ApiCheckFailed {
+                    api: (*api).to_owned(),
+                    source: e,
+                })?;
 
-            if !enabled {
+            if output.trim().is_empty() {
                 report.disabled_apis.push((*api).to_owned());
             }
         }
@@ -187,7 +189,7 @@ impl<E: GcloudExecutor> GcloudClient<E> {
         ];
 
         for (label, api) in &required_apis {
-            let enabled = self
+            let result = self
                 .executor
                 .exec(&args([
                     "services",
@@ -199,17 +201,17 @@ impl<E: GcloudExecutor> GcloudClient<E> {
                     "--format",
                     "value(config.name)",
                 ]))
-                .await
-                .map(|out| !out.trim().is_empty())
-                .unwrap_or(false);
+                .await;
+
+            let check = match result {
+                Ok(out) if !out.trim().is_empty() => CheckResult::ok("Enabled"),
+                Ok(_) => CheckResult::fail("Not enabled"),
+                Err(e) => CheckResult::fail(&format!("Check failed: {e}")),
+            };
 
             report.apis.push(ApiCheck {
                 name: label.to_string(),
-                result: if enabled {
-                    CheckResult::ok("Enabled")
-                } else {
-                    CheckResult::fail("Not enabled")
-                },
+                result: check,
             });
         }
 
@@ -932,6 +934,9 @@ pub enum PreflightError {
 
     #[error("GCP project '{0}' is not accessible — check project ID and permissions")]
     ProjectNotAccessible(String),
+
+    #[error("failed to check API status for {api}")]
+    ApiCheckFailed { api: String, source: GcloudError },
 }
 
 // ── Doctor types ──
