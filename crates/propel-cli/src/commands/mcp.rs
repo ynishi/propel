@@ -332,6 +332,7 @@ impl PropelMcpServer {
         let config = PropelConfig::load(&project_path);
         let project_id = config
             .as_ref()
+            // arch-lint: allow(no-silent-result-drop) reason="MCP doctor must report diagnostics even when propel.toml is missing or invalid"
             .ok()
             .and_then(|c| c.project.gcp_project_id.as_deref());
 
@@ -399,6 +400,7 @@ impl PropelMcpServer {
         let project_id = Self::require_project_id(&config)?;
         let service_name = Self::service_name(&config, &project);
 
+        // arch-lint: allow(no-silent-result-drop) reason="Option: None = MCP client omitted tail param; 100 is default limit"
         let limit = req.tail.unwrap_or(100).min(1000);
 
         let client = GcloudClient::new();

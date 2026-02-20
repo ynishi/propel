@@ -6,6 +6,7 @@ pub async fn doctor() -> anyhow::Result<()> {
     let config = PropelConfig::load(Path::new("."));
     let project_id = config
         .as_ref()
+        // arch-lint: allow(no-silent-result-drop) reason="doctor must report diagnostics even when propel.toml is missing or invalid"
         .ok()
         .and_then(|c| c.project.gcp_project_id.as_deref());
 

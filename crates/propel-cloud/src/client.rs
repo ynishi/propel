@@ -119,6 +119,7 @@ impl<E: GcloudExecutor> GcloudClient<E> {
                     .lines()
                     .next()
                     .and_then(|line| line.strip_prefix("Google Cloud SDK "))
+                    // arch-lint: allow(no-silent-result-drop) reason="Option: doctor() is diagnostic — raw output fallback is more informative than failing on format change"
                     .unwrap_or(v.trim());
                 report.gcloud = CheckResult::ok(version.trim());
             }

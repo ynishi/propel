@@ -200,6 +200,36 @@ docs/
   gcp-setup.md   Full GCP setup guide
 ```
 
+## Development
+
+```bash
+cargo fmt --check            # Format check
+cargo clippy -- -D warnings  # Lint
+cargo test --workspace       # Unit + integration + architecture tests
+```
+
+### Architecture tests
+
+[arch-lint](https://github.com/ynishi/arch-lint) enforces project-wide coding rules as regular `#[test]` functions.
+Enabled rules:
+
+| Rule | ID | What it catches |
+|------|----|-----------------|
+| `NoErrorSwallowing` | AL003 | `.unwrap_or_default()`, `let _ = ...` on Result |
+| `NoSilentResultDrop` | AL013 | `.ok()` that silently discards errors |
+
+Configuration: [`arch-lint.toml`](arch-lint.toml)
+Test: [`crates/propel-cli/tests/architecture.rs`](crates/propel-cli/tests/architecture.rs)
+
+To suppress a legitimate case, add an allow comment on the **line immediately before** the flagged call:
+
+```rust
+// arch-lint: allow(no-silent-result-drop) reason="absence means unconfigured"
+.ok()
+```
+
+These tests run in CI via `cargo test --workspace`.
+
 ## Examples
 
 See [`examples/hello-axum/`](examples/hello-axum/) for a minimal Axum project that deploys with Propel.

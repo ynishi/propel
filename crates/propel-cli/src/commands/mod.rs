@@ -17,6 +17,7 @@ pub(crate) const ARTIFACT_REPO_NAME: &str = "propel";
 
 /// Resolve the Cloud Run service name: config override or Cargo package name.
 pub(crate) fn service_name<'a>(config: &'a PropelConfig, project: &'a CargoProject) -> &'a str {
+    // arch-lint: allow(no-silent-result-drop) reason="Option: None = user omitted [project].name; Cargo package name is intended fallback"
     config.project.name.as_deref().unwrap_or(&project.name)
 }
 

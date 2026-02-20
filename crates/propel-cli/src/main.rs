@@ -93,12 +93,17 @@ enum CiAction {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    let env_filter = match tracing_subscriber::EnvFilter::try_from_default_env() {
+        Ok(filter) => filter,
+        Err(e) => {
+            // RUST_LOG set but malformed → warn the user
+            if std::env::var("RUST_LOG").is_ok() {
+                eprintln!("Warning: invalid RUST_LOG value: {e}, falling back to 'info'");
+            }
+            tracing_subscriber::EnvFilter::new("info")
+        }
+    };
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     let cli = Cli::parse();
 

@@ -1,0 +1,15 @@
+# arch-lint configuration for propel-rs
+
+preset = "recommended"
+fail_on = "warning"
+
+[analyzer]
+exclude = [
+    "**/target/**",
+    "**/vendor/**",
+    "**/generated/**",
+    "**/tests/**",
+    "examples/**",
+    "crates/propel-sdk/**",  # deprecated crate — frozen, no changes allowed
+]
+respect_gitignore = true

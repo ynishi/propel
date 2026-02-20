@@ -54,6 +54,7 @@ impl PropelState {
             supabase_anon_key: SecretString::from(required_env("SUPABASE_ANON_KEY")?),
             supabase_jwt_secret: SecretString::from(required_env("SUPABASE_JWT_SECRET")?),
             server_key: std::env::var("PROPEL_SERVER_KEY")
+                // arch-lint: allow(no-silent-result-drop) reason="env var absence means server key is not configured — a valid operational state"
                 .ok()
                 .filter(|k| !k.trim().is_empty())
                 .map(SecretString::from),
