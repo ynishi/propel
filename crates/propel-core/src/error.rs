@@ -16,24 +16,45 @@ pub enum Error {
         source: toml::de::Error,
     },
 
-    #[error("failed to read Cargo.toml at {path}")]
-    CargoTomlRead {
+    #[error("invalid include path {path:?}: {reason}")]
+    InvalidIncludePath { path: String, reason: &'static str },
+
+    // ── Cargo project discovery ──
+    #[error("cargo metadata failed for {manifest_path}: {detail}")]
+    CargoMetadata {
+        manifest_path: PathBuf,
+        detail: String,
+    },
+
+    #[error("failed to resolve project directory {path}")]
+    ProjectDirResolve {
         path: PathBuf,
         source: std::io::Error,
     },
 
-    #[error("failed to parse Cargo.toml at {path}")]
-    CargoTomlParse {
-        path: PathBuf,
-        source: toml::de::Error,
+    #[error(
+        "no package found in {dir}; workspace members: {}",
+        format_members(workspace_members)
+    )]
+    NoPackageInDir {
+        dir: PathBuf,
+        workspace_members: Vec<String>,
     },
 
-    #[error("missing [package] section in Cargo.toml at {0}")]
-    MissingPackageSection(PathBuf),
+    #[error("no binary target in package '{package}' — propel requires a binary to deploy")]
+    NoBinaryTarget { package: String },
 
-    #[error("missing package.name in Cargo.toml at {0}")]
-    MissingPackageName(PathBuf),
+    #[error(
+        "multiple binary targets found: {}; set `default-run` in Cargo.toml to select one",
+        names.join(", ")
+    )]
+    MultipleBinaries { names: Vec<String> },
+}
 
-    #[error("invalid include path {path:?}: {reason}")]
-    InvalidIncludePath { path: String, reason: &'static str },
+fn format_members(members: &[String]) -> String {
+    if members.is_empty() {
+        "(none)".to_owned()
+    } else {
+        members.join(", ")
+    }
 }

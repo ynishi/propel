@@ -60,6 +60,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rmcp = { version = "0.15", features = ["server", "transport-io", "macros"] }
 schemars = "1.2"
 
+# Cargo metadata
+cargo_metadata = "0.19"
+
 # Testing
 mockall = "0.13"
 assert_cmd = "2"

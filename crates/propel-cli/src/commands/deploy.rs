@@ -1,7 +1,7 @@
 use propel_build::dockerfile::DockerfileGenerator;
 use propel_build::{bundle, eject as eject_mod};
 use propel_cloud::GcloudClient;
-use propel_core::{ProjectMeta, PropelConfig};
+use propel_core::{CargoProject, PropelConfig};
 use std::path::PathBuf;
 
 /// Execute the full deploy pipeline.
@@ -19,10 +19,10 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
 
     // Load configuration
     let config = PropelConfig::load(&project_dir)?;
-    let meta = ProjectMeta::from_cargo_toml(&project_dir)?;
+    let project = CargoProject::discover(&project_dir)?;
 
     let gcp_project_id = super::require_gcp_project_id(&config)?;
-    let service_name = super::service_name(&config, &meta);
+    let service_name = super::service_name(&config, &project);
     let region = &config.project.region;
     let image_tag = format!(
         "{}:latest",
@@ -58,7 +58,7 @@ pub async fn deploy(allow_dirty: bool) -> anyhow::Result<()> {
         println!("Using ejected Dockerfile from .propel/Dockerfile");
         eject_mod::load_ejected_dockerfile(&project_dir)?
     } else {
-        let generator = DockerfileGenerator::new(&config.build, &meta, config.cloud_run.port);
+        let generator = DockerfileGenerator::new(&config.build, &project, config.cloud_run.port);
         generator.render()
     };
 

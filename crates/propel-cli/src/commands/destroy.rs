@@ -1,6 +1,6 @@
 use super::ci;
 use propel_cloud::GcloudClient;
-use propel_core::{ProjectMeta, PropelConfig};
+use propel_core::{CargoProject, PropelConfig};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -20,11 +20,11 @@ pub async fn destroy(
     let client = GcloudClient::new();
 
     let config = PropelConfig::load(&project_dir)?;
-    let meta = ProjectMeta::from_cargo_toml(&project_dir)?;
+    let project = CargoProject::discover(&project_dir)?;
 
     let gcp_project_id = super::require_gcp_project_id(&config)?;
 
-    let service_name = super::service_name(&config, &meta);
+    let service_name = super::service_name(&config, &project);
     let region = &config.project.region;
 
     // Discover secrets for display / deletion
